@@ -344,7 +344,8 @@ h1 { color: var(--strong); font-size: 27px; font-weight: 700; letter-spacing: -.
 @media (max-width: 760px) {
   .topbar { flex-wrap: wrap; height: auto; padding: 10px 14px; gap: 10px; position: static; }
   .brand-sep, .tagline { display: none; }
-  .search { order: 5; width: 100%; margin-left: 0; }
+  .search-form { order: 5; width: 100%; margin-left: 0; }
+  .search { width: 100%; }
   .theme-wrap { margin-left: auto; }
   .app { grid-template-columns: 1fr; padding: 14px; }
   .sidebar { position: static; margin-bottom: 18px; }
@@ -363,3 +364,18 @@ h1 { color: var(--strong); font-size: 27px; font-weight: 700; letter-spacing: -.
   .task-desc { white-space: normal; }
   .modal-head, .modal-sec, .cat-list { padding-left: 18px; padding-right: 18px; }
 }
+
+/* ---------- PHP version additions ---------- */
+a { color: inherit; text-decoration: none; }
+a.nav-item, a.tab, a.task, a.brand, a.btn { text-decoration: none; }
+a.tab { display: inline-flex; align-items: center; }
+a.task { color: inherit; }
+a.task:focus-visible, a.nav-item:focus-visible, a.btn:focus-visible { outline: 2px solid var(--mauve); outline-offset: 2px; }
+.check-static { width: 22px; height: 22px; flex: none; margin-top: 3px; }
+.check-static img { width: 22px; height: 22px; display: block; }
+.menu a { display: block; width: 100%; padding: 8px 10px; border-radius: 8px; font-size: 14px; color: var(--sub); }
+.menu a:hover, .menu a.on { background: var(--s0); color: var(--text); }
+.status-box { margin-top: 12px; height: 46px; display: flex; align-items: center; padding: 0 17px; border: 1px solid var(--s0); border-radius: 12px; background: var(--mantle); font-size: 16px; }
+.search-form { margin-left: auto; }
+.search-form .search { margin-left: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
