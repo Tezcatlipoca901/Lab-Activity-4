@@ -36,9 +36,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (b) { applyTheme(b.dataset.theme); closeMenus(); }
   });
   document.addEventListener('click', closeMenus);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeMenus();
+      // Close the delete overlay by following the Cancel link
+      const cancel = $('#delCancel');
+      if (cancel) cancel.click();
+    }
+  });
 
-  /* ---------- Create-task form helpers ---------- */
+  /* ---------- Task form helpers (create + edit) ---------- */
   const form = $('#taskForm');
   if (!form) return;
 

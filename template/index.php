@@ -1,7 +1,7 @@
 <?php
 /* =====================================================================
    Brewlist – Lab Activity 4 (PHP Sessions)
-   Scope: CREATE a task + READ/VIEW tasks
+   Scope: CREATE / READ / UPDATE / DELETE tasks
    ===================================================================== */
 
 session_start();                                   // keep tasks across page reloads
@@ -64,7 +64,7 @@ function inView(array $task, string $view): bool
 // Build a link that keeps the current filters but changes the given params (null = remove).
 function url(array $changes = []): string
 {
-    $keep   = ['view', 'cat', 'status', 'sort', 'q', 'task', 'new'];
+    $keep   = ['view', 'cat', 'status', 'sort', 'q', 'task', 'new', 'edit', 'del'];
     $params = array_intersect_key($_GET, array_flip($keep));
     foreach ($changes as $key => $value) {
         if ($value === null || $value === '') unset($params[$key]);
@@ -86,59 +86,132 @@ $sort      = isset($sortNames[$_GET['sort'] ?? '']) ? $_GET['sort'] : 'earliest'
 $search    = trim($_GET['q'] ?? '');
 
 /* =====================================================================
-   CREATE  –  handle the self-submitting form (method="POST")
+   CREATE  –  handle the self-submitting form (method="POST", action=create)
+   UPDATE  –  handle the edit form  (method="POST", action=update)
+   DELETE  –  handle the delete form (method="POST", action=delete)
+   TOGGLE  –  toggle done/not-done  (method="POST", action=toggle)
    ===================================================================== */
 $errors = [];
 $old    = ['title' => '', 'desc' => '', 'due' => '', 'cat' => DEFAULT_CATEGORY];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // 1. Extraction with null-coalescing fallback  2. Trimming extra spaces
-    $old['title'] = trim($_POST['task_name'] ?? '');
-    $old['desc']  = trim($_POST['task_description'] ?? '');
-    $old['due']   = trim($_POST['due_date'] ?? '');
-    $old['cat']   = trim($_POST['category'] ?? '');
+    $action = trim($_POST['action'] ?? 'create');
 
-    // 3. Server-side validation (collect messages in $errors)
-    $errors = [];
-
-    if ($old['title'] === '') {
-        $errors['title'] = 'Task name is required.';
-    } elseif (mb_strlen($old['title']) < 3) {
-        $errors['title'] = 'Task name must be at least 3 characters long.';
-    } elseif (mb_strlen($old['title']) > 80) {
-        $errors['title'] = 'Task name cannot exceed 80 characters.';
-    }
-
-    if ($old['desc'] === '') {
-        $errors['desc'] = 'Description is required.';
-    } elseif (mb_strlen($old['desc']) > 255) {
-        $errors['desc'] = 'Description cannot exceed 255 characters.';
-    }
-
-    if ($old['due'] !== '') {
-        $d = DateTime::createFromFormat('Y-m-d', $old['due']);
-        if (!$d || $d->format('Y-m-d') !== $old['due']) {
-            $errors['due'] = 'Please enter a valid due date.';
+    /* ---- TOGGLE ---- */
+    if ($action === 'toggle') {
+        $tid = (int) ($_POST['task_id'] ?? 0);
+        if (isset($_SESSION['tasks'][$tid])) {
+            $_SESSION['tasks'][$tid]['done'] = !$_SESSION['tasks'][$tid]['done'];
         }
-    }
-
-    if (!isset($categories[$old['cat']])) {
-        $errors['cat'] = 'Please choose a valid category.';
-    }
-
-    // 4. Save in $_SESSION, then redirect (Post/Redirect/Get) so a refresh doesn't resubmit
-    if (!$errors) {
-        $id = $_SESSION['next_id']++;
-        $_SESSION['tasks'][$id] = [
-            'id'    => $id,
-            'title' => $old['title'],        // stored raw; escaped with e() when displayed
-            'desc'  => $old['desc'],
-            'cat'   => $old['cat'],
-            'due'   => $old['due'],
-            'done'  => false,
-        ];
-        header('Location: ' . url(['task' => $id, 'new' => null]));
+        header('Location: ' . url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null]));
         exit();
+    }
+
+    /* ---- DELETE ---- */
+    if ($action === 'delete') {
+        $tid = (int) ($_POST['task_id'] ?? 0);
+        unset($_SESSION['tasks'][$tid]);
+        header('Location: ' . url(['task' => null, 'new' => null, 'edit' => null, 'del' => null]));
+        exit();
+    }
+
+    /* ---- UPDATE ---- */
+    if ($action === 'update') {
+        $tid = (int) ($_POST['task_id'] ?? 0);
+        $old['title'] = trim($_POST['task_name'] ?? '');
+        $old['desc']  = trim($_POST['task_description'] ?? '');
+        $old['due']   = trim($_POST['due_date'] ?? '');
+        $old['cat']   = trim($_POST['category'] ?? '');
+
+        if ($old['title'] === '') {
+            $errors['title'] = 'Task name is required.';
+        } elseif (mb_strlen($old['title']) < 3) {
+            $errors['title'] = 'Task name must be at least 3 characters long.';
+        } elseif (mb_strlen($old['title']) > 80) {
+            $errors['title'] = 'Task name cannot exceed 80 characters.';
+        }
+
+        if ($old['desc'] === '') {
+            $errors['desc'] = 'Description is required.';
+        } elseif (mb_strlen($old['desc']) > 255) {
+            $errors['desc'] = 'Description cannot exceed 255 characters.';
+        }
+
+        if ($old['due'] !== '') {
+            $d = DateTime::createFromFormat('Y-m-d', $old['due']);
+            if (!$d || $d->format('Y-m-d') !== $old['due']) {
+                $errors['due'] = 'Please enter a valid due date.';
+            }
+        }
+
+        if (!isset($categories[$old['cat']])) {
+            $errors['cat'] = 'Please choose a valid category.';
+        }
+
+        if (!$errors && isset($_SESSION['tasks'][$tid])) {
+            $_SESSION['tasks'][$tid]['title'] = $old['title'];
+            $_SESSION['tasks'][$tid]['desc']  = $old['desc'];
+            $_SESSION['tasks'][$tid]['due']   = $old['due'];
+            $_SESSION['tasks'][$tid]['cat']   = $old['cat'];
+            header('Location: ' . url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null]));
+            exit();
+        }
+        // Fall through to re-render the edit form with errors
+        // (keep ?edit=1 in the URL so the right panel shows the form)
+        $_GET['task'] = $tid;
+        $_GET['edit'] = '1';
+    }
+
+    /* ---- CREATE ---- */
+    if ($action === 'create') {
+        // 1. Extraction with null-coalescing fallback  2. Trimming extra spaces
+        $old['title'] = trim($_POST['task_name'] ?? '');
+        $old['desc']  = trim($_POST['task_description'] ?? '');
+        $old['due']   = trim($_POST['due_date'] ?? '');
+        $old['cat']   = trim($_POST['category'] ?? '');
+
+        // 3. Server-side validation (collect messages in $errors)
+        $errors = [];
+
+        if ($old['title'] === '') {
+            $errors['title'] = 'Task name is required.';
+        } elseif (mb_strlen($old['title']) < 3) {
+            $errors['title'] = 'Task name must be at least 3 characters long.';
+        } elseif (mb_strlen($old['title']) > 80) {
+            $errors['title'] = 'Task name cannot exceed 80 characters.';
+        }
+
+        if ($old['desc'] === '') {
+            $errors['desc'] = 'Description is required.';
+        } elseif (mb_strlen($old['desc']) > 255) {
+            $errors['desc'] = 'Description cannot exceed 255 characters.';
+        }
+
+        if ($old['due'] !== '') {
+            $d = DateTime::createFromFormat('Y-m-d', $old['due']);
+            if (!$d || $d->format('Y-m-d') !== $old['due']) {
+                $errors['due'] = 'Please enter a valid due date.';
+            }
+        }
+
+        if (!isset($categories[$old['cat']])) {
+            $errors['cat'] = 'Please choose a valid category.';
+        }
+
+        // 4. Save in $_SESSION, then redirect (Post/Redirect/Get) so a refresh doesn't resubmit
+        if (!$errors) {
+            $id = $_SESSION['next_id']++;
+            $_SESSION['tasks'][$id] = [
+                'id'    => $id,
+                'title' => $old['title'],        // stored raw; escaped with e() when displayed
+                'desc'  => $old['desc'],
+                'cat'   => $old['cat'],
+                'due'   => $old['due'],
+                'done'  => false,
+            ];
+            header('Location: ' . url(['task' => $id, 'new' => null]));
+            exit();
+        }
     }
 }
 
@@ -147,7 +220,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
    ===================================================================== */
 $selectedId = isset($_GET['task']) ? (int) $_GET['task'] : 0;
 $selected   = $_SESSION['tasks'][$selectedId] ?? null;
-$showDetail = $selected !== null && !isset($_GET['new']) && $_SERVER['REQUEST_METHOD'] !== 'POST';
+$showEdit   = $selected !== null && isset($_GET['edit']) && $_GET['edit'] === '1';
+$showDel    = $selected !== null && isset($_GET['del'])  && $_GET['del']  === '1';
+$showDetail = $selected !== null && !isset($_GET['new']) && !$showEdit && $_SERVER['REQUEST_METHOD'] !== 'POST';
+
+// If we're returning from a failed UPDATE, pre-fill the form with the submitted values
+if ($errors && isset($_GET['edit'])) {
+    $showEdit   = true;
+    $showDetail = false;
+}
+
+// If we're returning from a failed UPDATE without errors, $old is already populated above.
+// Prefill $old from the selected task if we just opened the edit form (GET request).
+if ($showEdit && !$errors) {
+    $old = [
+        'title' => $selected['title'],
+        'desc'  => $selected['desc'],
+        'due'   => $selected['due'],
+        'cat'   => $selected['cat'],
+    ];
+}
 
 $allTasks = $_SESSION['tasks'];
 
@@ -304,7 +396,7 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
           <?php $color = $categories[$task['cat']] ?? '#6c7086'; ?>
           <li>
             <a class="task<?= $task['done'] ? ' done' : '' ?><?= ($showDetail && $selectedId === $task['id']) ? ' selected' : '' ?>"
-               href="<?= e(url(['task' => $task['id'], 'new' => null])) ?>">
+               href="<?= e(url(['task' => $task['id'], 'new' => null, 'edit' => null, 'del' => null])) ?>">
               <span class="check-static"><img src="../assets/icons/<?= $task['done'] ? 'check-on' : 'check-off' ?>.png" alt="<?= $task['done'] ? 'Completed' : 'Not completed' ?>"></span>
               <div class="task-body">
                 <div class="task-top">
@@ -340,7 +432,70 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
 
   <!-- ================= Right panel ================= -->
   <aside class="panel" id="panel">
-    <?php if ($showDetail): // ---------- READ: task details ---------- ?>
+
+    <?php if ($showEdit): // ---------- EDIT: pre-filled task form ---------- ?>
+      <?php $color = $categories[$selected['cat']] ?? '#6c7086'; ?>
+      <div class="panel-ic panel-ic-edit"><img src="../assets/icons/edit.png" alt="" style="width:18px;height:18px;"></div>
+      <h2>Edit task</h2>
+      <p class="panel-sub">Make changes without losing the original task.</p>
+
+      <form class="form" id="taskForm" method="POST" novalidate>
+        <input type="hidden" name="action"  value="update">
+        <input type="hidden" name="task_id" value="<?= e($selectedId) ?>">
+
+        <?php if ($errors): ?>
+          <div class="banner" role="alert">
+            <img src="../assets/icons/warning.png" alt="">
+            <div><strong>Check the highlighted fields</strong><span>Fix the errors below before saving changes.</span></div>
+          </div>
+        <?php endif; ?>
+
+        <div class="field<?= $bad('title') ?>">
+          <label for="task_name"><span>Task name <i class="req">*</i></span></label>
+          <input class="input" type="text" id="task_name" name="task_name" maxlength="80"
+                 placeholder="What needs to be done?" value="<?= e($old['title']) ?>" autocomplete="off">
+          <?php if (isset($errors['title'])): ?><p class="err"><img src="../assets/icons/warning.png" alt=""><?= e($errors['title']) ?></p><?php endif; ?>
+        </div>
+
+        <div class="field<?= $bad('desc') ?>">
+          <label for="task_description"><span>Description <i class="req">*</i></span><span class="counter" id="counter"><?= mb_strlen($old['desc']) ?>/255</span></label>
+          <textarea class="textarea" id="task_description" name="task_description" maxlength="255"
+                    placeholder="Add a little context..."><?= e($old['desc']) ?></textarea>
+          <?php if (isset($errors['desc'])): ?><p class="err"><img src="../assets/icons/warning.png" alt=""><?= e($errors['desc']) ?></p><?php endif; ?>
+        </div>
+
+        <div class="row2">
+          <div class="field<?= $bad('due') ?>">
+            <label for="due_date"><span>Due date <i class="opt">(optional)</i></span></label>
+            <div class="date-input">
+              <input type="date" id="due_date" name="due_date" value="<?= e($old['due']) ?>">
+              <img src="../assets/icons/calendar.png" alt="">
+            </div>
+            <?php if (isset($errors['due'])): ?><p class="err"><img src="../assets/icons/warning.png" alt=""><?= e($errors['due']) ?></p><?php endif; ?>
+          </div>
+          <div class="field<?= $bad('cat') ?>">
+            <label for="category"><span>Category <i class="req">*</i></span></label>
+            <div class="select-wrap" style="margin-top:0">
+              <select class="select" id="category" name="category" style="font-size:15px">
+                <?php foreach ($categories as $name => $catColor): ?>
+                  <option value="<?= e($name) ?>"<?= $old['cat'] === $name ? ' selected' : '' ?>><?= e($name) ?></option>
+                <?php endforeach; ?>
+              </select>
+              <svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+            <?php if (isset($errors['cat'])): ?><p class="err"><img src="../assets/icons/warning.png" alt=""><?= e($errors['cat']) ?></p><?php endif; ?>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <a class="btn btn-cancel" href="<?= e(url(['edit' => null, 'new' => null])) ?>">Cancel</a>
+          <button type="submit" name="submit" class="btn btn-primary">
+            <img src="../assets/icons/edit-dark.png" alt="" style="width:15px;height:15px;">Save changes
+          </button>
+        </div>
+      </form>
+
+    <?php elseif ($showDetail): // ---------- READ: task details ---------- ?>
       <?php $color = $categories[$selected['cat']] ?? '#6c7086'; ?>
       <div class="detail-head">
         <div>
@@ -358,7 +513,28 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
       <div class="sec-title">Description</div>
       <p class="detail-desc"><?= e($selected['desc']) ?></p>
       <div class="sec-title">Status</div>
-      <div class="status-box"><?= $selected['done'] ? 'Completed' : 'Not completed' ?></div>
+
+      <!-- Toggle done/not-done -->
+      <form method="POST" style="margin-top:12px;margin-bottom:0">
+        <input type="hidden" name="action"  value="toggle">
+        <input type="hidden" name="task_id" value="<?= e($selectedId) ?>">
+        <?php foreach (['view' => $view === 'all' ? '' : $view, 'cat' => $catFilter, 'status' => $status === 'all' ? '' : $status, 'sort' => $sort === 'earliest' ? '' : $sort, 'task' => $selectedId, 'q' => $search] as $k => $v): ?>
+          <?php if ($v): ?><input type="hidden" name="<?= e($k) ?>" value="<?= e($v) ?>"><?php endif; ?>
+        <?php endforeach; ?>
+        <button type="submit" class="status-box status-box-btn">
+          <?= $selected['done'] ? 'Completed' : 'Not completed' ?>
+        </button>
+      </form>
+
+      <!-- Edit / Delete action buttons -->
+      <div class="panel-actions">
+        <a class="btn btn-outline btn-edit" href="<?= e(url(['edit' => 1, 'new' => null, 'del' => null])) ?>">
+          <img src="../assets/icons/edit.png" alt="" class="ed">Edit task
+        </a>
+        <a class="btn btn-danger btn-del" href="<?= e(url(['del' => 1, 'new' => null, 'edit' => null])) ?>">
+          <img src="../assets/icons/delete-red.png" alt="" style="width:15px;height:15px;">Delete task
+        </a>
+      </div>
 
     <?php else: // ---------- CREATE: self-submitting form ---------- ?>
       <div class="panel-ic"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></div>
@@ -366,6 +542,8 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
       <p class="panel-sub">Capture what needs your attention next.</p>
 
       <form class="form" id="taskForm" method="POST" novalidate>
+        <input type="hidden" name="action" value="create">
+
         <?php if ($errors): ?>
           <div class="banner" role="alert">
             <img src="../assets/icons/warning.png" alt="">
@@ -400,7 +578,7 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
             <label for="category"><span>Category <i class="req">*</i></span></label>
             <div class="select-wrap" style="margin-top:0">
               <select class="select" id="category" name="category" style="font-size:15px">
-                <?php foreach ($categories as $name => $color): ?>
+                <?php foreach ($categories as $name => $catColor): ?>
                   <option value="<?= e($name) ?>"<?= $old['cat'] === $name ? ' selected' : '' ?>><?= e($name) ?></option>
                 <?php endforeach; ?>
               </select>
@@ -420,6 +598,31 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
     <?php endif; ?>
   </aside>
 </div>
+
+<?php if ($showDel && $selected): // ---- DELETE CONFIRMATION DIALOG ---- ?>
+<div class="overlay" id="delOverlay" role="dialog" aria-modal="true" aria-labelledby="delTitle">
+  <div class="dialog">
+    <div class="dialog-icon">
+      <img src="../assets/icons/delete-red.png" alt="" style="width:20px;height:20px;">
+    </div>
+    <h2 id="delTitle">Delete this task?</h2>
+    <p>This will remove <strong><?= e($selected['title']) ?></strong> from your task list. This action cannot be undone.</p>
+    <div class="dialog-actions">
+      <a class="btn btn-outline" id="delCancel" href="<?= e(url(['del' => null])) ?>">Cancel</a>
+      <form method="POST" style="margin:0">
+        <input type="hidden" name="action"  value="delete">
+        <input type="hidden" name="task_id" value="<?= e($selectedId) ?>">
+        <?php foreach (['view' => $view === 'all' ? '' : $view, 'cat' => $catFilter, 'status' => $status === 'all' ? '' : $status, 'sort' => $sort === 'earliest' ? '' : $sort, 'q' => $search] as $k => $v): ?>
+          <?php if ($v): ?><input type="hidden" name="<?= e($k) ?>" value="<?= e($v) ?>"><?php endif; ?>
+        <?php endforeach; ?>
+        <button type="submit" class="btn btn-danger">
+          <img src="../assets/icons/delete-red.png" alt="" style="width:15px;height:15px;">Delete task
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
 
 </body>
 </html>

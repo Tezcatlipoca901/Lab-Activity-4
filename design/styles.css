@@ -229,11 +229,19 @@ h1 { color: var(--strong); font-size: 27px; font-weight: 700; letter-spacing: -.
 .select option { background: var(--mantle); color: var(--text); }
 .select-wrap .chev { position: absolute; right: 14px; top: 50%; margin-top: -7px; pointer-events: none; }
 .input:focus, .textarea:focus, .select:focus, .date-input:focus-within { border-color: var(--mauve); box-shadow: 0 0 0 3px color-mix(in srgb, var(--mauve) 16%, transparent); }
-.panel-actions { display: flex; gap: 10px; margin-top: 52px; }
+.panel-actions { display: flex; gap: 10px; margin-top: 24px; }
 .panel-actions .btn { flex: 1; height: 38px; font-size: 15px; }
 .btn-edit .ed { width: 15px; height: 15px; }
-.btn-del { background: var(--mantle); border-color: var(--s0); color: var(--red); }
-.btn-del:hover { background: color-mix(in srgb, var(--red) 9%, var(--mantle)); border-color: color-mix(in srgb, var(--red) 40%, var(--s0)); }
+.btn-del { background: var(--mantle); border-color: color-mix(in srgb, var(--red) 40%, var(--s0)); color: var(--red); }
+.btn-del:hover { background: color-mix(in srgb, var(--red) 9%, var(--mantle)); border-color: color-mix(in srgb, var(--red) 60%, var(--s0)); }
+.panel-ic-edit { background: color-mix(in srgb, var(--mauve) 14%, var(--base)); border: 1px solid var(--s0); }
+.status-box-btn {
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--mantle); border: 1px solid var(--s0); border-radius: 12px;
+  height: 46px; padding: 0 17px; font-size: 16px; color: var(--text);
+  transition: border-color .15s, background .15s;
+}
+.status-box-btn:hover { border-color: var(--s1); background: color-mix(in srgb, var(--s0) 40%, var(--mantle)); }
 
 /* form */
 .form { margin-top: 22px; }
