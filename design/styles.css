@@ -278,7 +278,7 @@ h1 { color: var(--strong); font-size: 27px; font-weight: 700; letter-spacing: -.
 
 /* ---------- Overlays ---------- */
 .overlay {
-  position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px;
+  position: fixed; inset: 0; z-index: 100; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; padding: 20px;
   background: rgba(10,10,18,.62); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
   animation: fade .15s ease-out;
 }
@@ -349,28 +349,115 @@ h1 { color: var(--strong); font-size: 27px; font-weight: 700; letter-spacing: -.
   .panel { grid-column: 1 / -1; position: static; margin: 22px 0 0 0; max-width: 560px; }
   .main { margin-right: 0; }
 }
+/* ---------- Mobile view (matches the Figma mobile frame) ---------- */
 @media (max-width: 760px) {
-  .topbar { flex-wrap: wrap; height: auto; padding: 10px 14px; gap: 10px; position: static; }
+  body.no-scroll { overflow: hidden; }
+
+  /* Top bar: [menu] [logo + name] ........ [theme]   /   full-width search below */
+  .topbar { flex-wrap: wrap; height: auto; padding: 12px 16px 14px; gap: 12px 10px; }
+  .topbar .menu-btn { display: grid; }
   .brand-sep, .tagline { display: none; }
-  .search-form { order: 5; width: 100%; margin-left: 0; }
-  .search { width: 100%; }
   .theme-wrap { margin-left: auto; }
-  .app { grid-template-columns: 1fr; padding: 14px; }
-  .sidebar { position: static; margin-bottom: 18px; }
-  .views { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
-  .nav-item { width: auto; flex: none; }
-  .nav-item span { flex: none; }
-  .side-divider { margin: 12px 0; }
-  .cats { flex-direction: row; flex-wrap: wrap; }
-  .cat-item { width: auto; }
-  .main { margin: 0; }
-  .panel { padding: 20px; margin-top: 18px; max-width: none; }
-  .toolbar { height: auto; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 12px; }
-  .tab, .tab:first-child { padding: 0 16px; }
-  .sort { justify-content: flex-end; }
-  .task-top { flex-direction: column; align-items: flex-start; gap: 6px; }
-  .task-desc { white-space: normal; }
+  .theme-btn { width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 12px; }
+  .theme-btn img { width: 16px; height: 16px; }
+  .theme-btn span, .theme-btn .chev { display: none; }
+  .theme-wrap .menu { left: auto; right: 0; }
+  .topbar .search-form { order: 5; flex: 0 0 100%; margin-left: 0; }
+  .search { width: 100%; height: 40px; }
+
+  /* Single column; the sidebar becomes a slide-in drawer */
+  .app { grid-template-columns: 1fr; padding: 4px 16px 28px; }
+  .main { margin: 0; padding-top: 10px; }
+
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 272px; max-width: 86vw; z-index: 60;
+    background: var(--mantle); border-right: 1px solid var(--s0);
+    padding: 22px 14px 28px; overflow-y: auto;
+    transform: translateX(-102%); transition: transform .22s ease; visibility: hidden;
+    box-shadow: 0 0 40px rgba(0,0,0,.45);
+  }
+  .sidebar.open { transform: none; visibility: visible; }
+  .sidebar .drawer-head { display: flex; align-items: center; justify-content: space-between; margin: 0 4px 22px 6px; }
+  .drawer-brand { display: flex; align-items: center; gap: 9px; }
+  .scrim { position: fixed; inset: 0; z-index: 55; background: rgba(10,10,18,.55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); animation: fade .15s ease-out; }
+
+  /* Heading + full-width "Add task" button */
+  .main-head { flex-direction: column; gap: 16px; margin-bottom: 16px; }
+  .btn-add { width: 100%; height: 42px; margin-top: 0; }
+  h1 { font-size: 24px; }
+
+  /* Toolbar: tabs row, then the sort row underneath */
+  .toolbar { height: auto; flex-direction: column; align-items: stretch; gap: 12px; padding: 12px; border-radius: 16px; }
+  .tabs { width: 100%; }
+  .tab, .tab:first-child { flex: 1; justify-content: center; padding: 0 8px; height: 38px; font-size: 15px; border: 1px solid transparent; }
+  .tab.active { background: none; border-color: color-mix(in srgb, var(--text) 75%, transparent); }
+  .sort { width: 100%; justify-content: flex-start; gap: 10px; padding: 12px 4px 0; border-top: 1px solid var(--s0); }
+  .sort-label { font-size: 13px; }
+  .sort-wrap { flex: 1; }
+  .sort-btn { width: 100%; justify-content: space-between; font-size: 13px; padding: 2px 0; }
+
+  /* Task cards: title / chip + date / description (one line) */
+  .task { padding: 14px 14px 13px 15px; gap: 12px; }
+  .task-top { flex-direction: column; align-items: flex-start; gap: 7px; }
+  .task-title { max-width: 100%; font-size: 15px; }
+  .task-desc { font-size: 13.5px; }
+
+  /* Right panel becomes a full-screen sheet, only when a task / the form is open */
+  .panel { display: none; }
+  body.panel-open .panel {
+    display: block; position: fixed; inset: 0; z-index: 50; margin: 0; max-width: none;
+    border: 0; border-radius: 0; padding: 0 16px 32px; overflow-y: auto; background: var(--base);
+  }
+  body.panel-open { overflow: hidden; }
+
+  /* "← Back to tasks" bar, then the content in a rounded card */
+  .panel .panel-close {
+    display: flex; align-items: center; gap: 14px; padding: 22px 6px 20px;
+    font-size: 15px; font-weight: 500; color: var(--sub);
+  }
+  .panel .panel-close:hover { color: var(--text); }
+  .panel .panel-close svg { width: 20px; height: 20px; }
+  .panel-card { border: 1px solid var(--s0); border-radius: 22px; background: var(--mantle); padding: 22px 22px 26px; }
+  .panel-card > :first-child { margin-top: 0; }
+
+  /* Details screen: status looks like a select, Edit is the primary button, Delete sits below it */
+  .status-box-btn { display: flex; align-items: center; justify-content: space-between; }
+  .status-box-btn .status-chev { display: block; }
+  .panel-actions { flex-direction: column; gap: 10px; margin-top: 28px; }
+  .panel-actions .btn { flex: none; width: 100%; height: 48px; font-size: 16px; border-radius: 12px; }
+  .panel-actions .btn-edit { background: var(--mauve); border-color: transparent; color: var(--on-accent); box-shadow: 0 2px 10px color-mix(in srgb, var(--mauve) 28%, transparent); }
+  .panel-actions .btn-edit:hover { filter: brightness(1.07); }
+
+  /* Create / edit screens: one field per row, primary button first, Cancel underneath */
+  .row2 { grid-template-columns: 1fr; gap: 0; }
+  .form-actions { display: flex; flex-direction: column-reverse; gap: 10px; }
+  .form-actions .btn { height: 48px; font-size: 16px; border-radius: 12px; }
+
+  /* swap the desktop icons for the mobile ones */
+  .btn .d-only { display: none; }
+  .btn .m-only { display: inline-block; }
+
+  /* Manage categories dialog: stacked layout like the Figma mobile frame */
+  .modal { width: 100%; }
+  .modal-head h2 { font-size: 22px; }
+  .modal-head p { font-size: 14px; }
   .modal-head, .modal-sec, .cat-list { padding-left: 18px; padding-right: 18px; }
+  .modal-sec .lbl { font-size: 14px; }
+  .cat-add { flex-direction: column; }
+  .cat-add .input { flex: none; width: 100%; height: 46px; font-size: 15px; }
+  .cat-add .btn { width: 100%; height: 42px; }
+  .color-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .color-lbl { font-size: 13px; }
+  .swatches { width: 100%; justify-content: space-between; }
+  .swatch { width: 26px; height: 26px; }
+  .cat-row { min-height: 62px; }
+  .cat-row .nm { font-size: 15px; }
+  .cat-row .ct { font-size: 12.5px; }
+  .modal .cat-row .acts { gap: 18px; }
+  .modal .cat-row .acts svg { width: 18px; height: 18px; }
+  .rename-input { height: 38px; font-size: 15px; }
+  .confirm-row { flex-direction: column; align-items: stretch; font-size: 14px; padding: 12px 0; }
+  .confirm-row .btns { justify-content: flex-end; }
 }
 
 /* ---------- PHP version additions ---------- */
@@ -384,6 +471,26 @@ a.task:focus-visible, a.nav-item:focus-visible, a.btn:focus-visible { outline: 2
 .menu a { display: block; width: 100%; padding: 8px 10px; border-radius: 8px; font-size: 14px; color: var(--sub); }
 .menu a:hover, .menu a.on { background: var(--s0); color: var(--text); }
 .status-box { margin-top: 12px; height: 46px; display: flex; align-items: center; padding: 0 17px; border: 1px solid var(--s0); border-radius: 12px; background: var(--mantle); font-size: 16px; }
-.search-form { margin-left: auto; }
+.search-form { margin-left: auto; position: relative; }
 .search-form .search { margin-left: 0; }
+.search-ic { position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; margin-top: -8px; stroke: var(--overlay); pointer-events: none; }
+
+/* Mobile-only controls (shown inside the 760px media query above) */
+.menu-btn { display: none; width: 36px; height: 36px; place-items: center; border-radius: 10px; color: var(--text); flex: none; }
+.menu-btn:hover { background: var(--s0); }
+.menu-btn svg { width: 22px; height: 22px; }
+.panel-close { display: none; }
+.m-only, .status-chev { display: none; }   /* shown only in the mobile media query */
+.drawer-head { display: none; }
+
+/* Manage categories */
+.manage-btn svg { width: 13px; height: 13px; }
+.manage-btn { text-decoration: none; }
+label.swatch { cursor: pointer; }
+.swatch:focus-within { outline: 2px solid var(--mauve); outline-offset: 3px; }
+.cat-row .acts a, .cat-row .acts button { width: 18px; height: 18px; display: grid; place-items: center; color: var(--sub); opacity: .9; }
+.cat-row .acts a:hover, .cat-row .acts button:hover { color: var(--text); opacity: 1; filter: none; }
+.cat-row .acts svg { width: 16px; height: 16px; }
+.cat-add + .err, .cat-row .info .err { margin-top: 6px; }
+.modal-sec .cat-add + .err { margin-top: 8px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
