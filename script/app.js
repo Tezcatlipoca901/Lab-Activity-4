@@ -42,8 +42,43 @@ document.addEventListener('DOMContentLoaded', () => {
       // Close the delete overlay by following the Cancel link
       const cancel = $('#delCancel');
       if (cancel) cancel.click();
+      // ...and the Manage categories dialog
+      const manageClose = $('#manageClose');
+      if (manageClose) manageClose.click();
     }
   });
+
+  /* ---------- Mobile drawer (sidebar) ---------- */
+  const menuBtn = $('#menuBtn'), sidebar = $('#sidebar'), scrim = $('#scrim');
+  function setDrawer(open) {
+    if (!menuBtn || !sidebar || !scrim) return;
+    sidebar.classList.toggle('open', open);
+    scrim.hidden = !open;
+    menuBtn.setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('no-scroll', open);
+  }
+  if (menuBtn) {
+    menuBtn.addEventListener('click', e => { e.stopPropagation(); setDrawer(!sidebar.classList.contains('open')); });
+    scrim.addEventListener('click', () => setDrawer(false));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') setDrawer(false); });
+    // Picking a view/category navigates; widening the window back to desktop resets the drawer
+    window.matchMedia('(min-width: 761px)').addEventListener('change', () => setDrawer(false));
+  }
+
+  const drawerClose = $('#drawerClose');
+  if (drawerClose) drawerClose.addEventListener('click', () => setDrawer(false));
+
+  /* ---------- Manage categories dialog ---------- */
+  document.querySelectorAll('.swatches input[type="radio"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      radio.closest('.swatches').querySelectorAll('.swatch').forEach(s => s.classList.toggle('on', s.contains(radio) && radio.checked));
+    });
+  });
+  // Focus the field that needs attention (rename box, or the new-category box after an error)
+  const renameInput = $('.rename-input');
+  const badCatInput = $('.cat-add .input.bad');
+  if (renameInput) { renameInput.focus(); renameInput.select(); }
+  else if (badCatInput) badCatInput.focus();
 
   /* ---------- Task form helpers (create + edit) ---------- */
   const form = $('#taskForm');

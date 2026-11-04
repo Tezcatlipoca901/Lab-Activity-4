@@ -8,14 +8,20 @@ session_start();                                   // keep tasks across page rel
 date_default_timezone_set('Asia/Manila');
 
 /* ---------- Configuration ---------- */
-// Category name => dot/chip color. Edit this list to add or remove categories.
-$categories = [
+const DEFAULT_CATEGORY = 'Others';   // can't be renamed or deleted; tasks of a deleted category move here
+
+// Colors offered in the "Manage categories" dialog.
+$palette = ['#cba6f7', '#a6e3a1', '#b794f6', '#6c7086', '#f9e2af', '#89dceb', '#f5c2e7', '#b4befe'];
+
+// Category name => dot/chip color. These are the starting categories; after that they live in
+// $_SESSION['categories'] and are added / renamed / deleted from the "Manage" dialog.
+$_SESSION['categories'] = $_SESSION['categories'] ?? [
     'School'   => '#cba6f7',
     'Personal' => '#a6e3a1',
     'Work'     => '#b794f6',
     'Others'   => '#6c7086',
 ];
-const DEFAULT_CATEGORY = 'Others';
+$categories = $_SESSION['categories'];
 
 $viewNames = ['all' => 'All tasks', 'today' => 'Today', 'week' => 'This week', 'month' => 'This month', 'year' => 'This year'];
 $viewIcons = ['all' => 'all-tasks', 'today' => 'today', 'week' => 'week', 'month' => 'month', 'year' => 'year'];
@@ -64,7 +70,7 @@ function inView(array $task, string $view): bool
 // Build a link that keeps the current filters but changes the given params (null = remove).
 function url(array $changes = []): string
 {
-    $keep   = ['view', 'cat', 'status', 'sort', 'q', 'task', 'new', 'edit', 'del'];
+    $keep   = ['view', 'cat', 'status', 'sort', 'q', 'task', 'new', 'edit', 'del', 'manage', 'rename', 'delcat'];
     $params = array_intersect_key($_GET, array_flip($keep));
     foreach ($changes as $key => $value) {
         if ($value === null || $value === '') unset($params[$key]);
@@ -94,6 +100,10 @@ $search    = trim($_GET['q'] ?? '');
 $errors = [];
 $old    = ['title' => '', 'desc' => '', 'due' => '', 'cat' => DEFAULT_CATEGORY];
 
+// "Manage categories" dialog: validation errors + values to re-fill after a failed submit.
+$catErrors = [];
+$catOld    = ['name' => '', 'color' => '#f9e2af', 'rename' => ''];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = trim($_POST['action'] ?? 'create');
 
@@ -113,6 +123,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         unset($_SESSION['tasks'][$tid]);
         header('Location: ' . url(['task' => null, 'new' => null, 'edit' => null, 'del' => null]));
         exit();
+    }
+
+    /* ---- CATEGORIES: add / rename / delete (Manage categories dialog) ---- */
+    if (in_array($action, ['cat_add', 'cat_rename', 'cat_delete'], true)) {
+        $orig = $action === 'cat_add' ? '' : (string) ($_POST['cat_orig'] ?? '');
+        $back = ['manage' => 1, 'rename' => null, 'delcat' => null];   // where to go after success
+
+        if ($action === 'cat_delete') {
+            if ($orig !== DEFAULT_CATEGORY && isset($_SESSION['categories'][$orig])) {
+                foreach ($_SESSION['tasks'] as &$t) {                    // move its tasks to "Others"
+                    if ($t['cat'] === $orig) $t['cat'] = DEFAULT_CATEGORY;
+                }
+                unset($t);
+                unset($_SESSION['categories'][$orig]);
+                if (($_GET['cat'] ?? '') === $orig) $back['cat'] = null;  // don't keep filtering by a deleted category
+            }
+            header('Location: ' . url($back));
+            exit();
+        }
+
+        $name  = trim($_POST['cat_name'] ?? '');
+        $color = trim($_POST['cat_color'] ?? '');
+        $key   = $action === 'cat_add' ? 'add' : 'rename';
+        $msg   = '';
+
+        if ($name === '') {
+            $msg = 'Category name is required.';
+        } elseif (mb_strlen($name) > 20) {
+            $msg = 'Category name cannot exceed 20 characters.';
+        } else {
+            foreach ($_SESSION['categories'] as $existing => $c) {
+                if ((string) $existing !== $orig && mb_strtolower((string) $existing) === mb_strtolower($name)) {
+                    $msg = 'That category already exists.';
+                }
+            }
+        }
+        if ($msg === '' && $action === 'cat_add' && !in_array($color, $palette, true)) {
+            $msg = 'Please pick a color.';
+        }
+        if ($msg === '' && $action === 'cat_rename' && ($orig === DEFAULT_CATEGORY || !isset($_SESSION['categories'][$orig]))) {
+            $msg = 'That category can\'t be renamed.';
+        }
+
+        if ($msg === '') {
+            if ($action === 'cat_add') {
+                $_SESSION['categories'][$name] = $color;
+            } else {
+                $renamed = [];                                            // rebuild so the order is kept
+                foreach ($_SESSION['categories'] as $k => $c) {
+                    $renamed[(string) $k === $orig ? $name : $k] = $c;
+                }
+                $_SESSION['categories'] = $renamed;
+                foreach ($_SESSION['tasks'] as &$t) {
+                    if ($t['cat'] === $orig) $t['cat'] = $name;
+                }
+                unset($t);
+                if (($_GET['cat'] ?? '') === $orig) $back['cat'] = $name;
+            }
+            header('Location: ' . url($back));
+            exit();
+        }
+
+        // Validation failed: keep the dialog open and show the message.
+        $catErrors[$key] = $msg;
+        if ($action === 'cat_add') {
+            $catOld['name']  = $name;
+            if (in_array($color, $palette, true)) $catOld['color'] = $color;
+        } else {
+            $catOld['rename'] = $name;
+            $_GET['rename']   = $orig;
+        }
+        $_GET['manage'] = '1';
     }
 
     /* ---- UPDATE ---- */
@@ -278,6 +360,17 @@ $hasFilters = $view !== 'all' || $catFilter || $status !== 'all' || $search !== 
 
 // Small helper so the form can mark a field as invalid.
 $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
+
+// Mobile: the right panel is a full-screen sheet, only shown when there is something to show in it.
+$panelOpen = $selected !== null || isset($_GET['new']) || $errors;
+
+// "Manage categories" dialog state (?manage=1, plus ?rename=Name / ?delcat=Name for the inline row actions).
+$getStr     = fn(string $k): string => is_string($_GET[$k] ?? null) ? $_GET[$k] : '';
+$showManage = $getStr('manage') === '1';
+$renameName = ($showManage && $getStr('rename') !== DEFAULT_CATEGORY && isset($categories[$getStr('rename')])) ? $getStr('rename') : null;
+$delCatName = ($showManage && $getStr('delcat') !== DEFAULT_CATEGORY && isset($categories[$getStr('delcat')])) ? $getStr('delcat') : null;
+$manageUrl  = url(['manage' => 1, 'rename' => null, 'delcat' => null]);
+$closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -289,9 +382,13 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
   <link rel="stylesheet" href="../design/styles.css">
   <script src="../script/app.js" defer></script>
 </head>
-<body data-theme="mocha">
+<body data-theme="mocha"<?= $panelOpen ? ' class="panel-open"' : '' ?>>
 
 <header class="topbar">
+  <!-- Mobile only: opens the sidebar as a drawer -->
+  <button type="button" class="menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="sidebar">
+    <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
   <a class="brand" href="index.php">
     <img src="../assets/icons/brewlist.png" alt="" class="brand-logo">
     <span class="brand-name">Brewlist</span>
@@ -319,13 +416,27 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
       <?php if ($v): ?><input type="hidden" name="<?= e($k) ?>" value="<?= e($v) ?>"><?php endif; ?>
     <?php endforeach; ?>
     <label class="sr-only" for="q">Search tasks</label>
+    <svg class="search-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input class="search" id="q" name="q" type="search" placeholder="Search tasks..." value="<?= e($search) ?>" autocomplete="off">
   </form>
 </header>
 
+<div class="scrim" id="scrim" hidden></div>
+
 <div class="app">
-  <!-- ================= Sidebar ================= -->
-  <aside class="sidebar">
+  <!-- ================= Sidebar (a slide-in drawer on mobile) ================= -->
+  <aside class="sidebar" id="sidebar">
+    <!-- Mobile only: drawer header with a close button -->
+    <div class="drawer-head">
+      <span class="drawer-brand">
+        <img src="../assets/icons/brewlist.png" alt="" class="brand-logo">
+        <span class="brand-name">Brewlist</span>
+      </span>
+      <button type="button" class="icon-btn" id="drawerClose" aria-label="Close menu">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+
     <nav class="views">
       <?php foreach ($viewNames as $key => $label): $active = $view === $key; ?>
         <a class="nav-item<?= $active ? ' active' : '' ?>" href="<?= e(url(['view' => $key])) ?>">
@@ -340,6 +451,9 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
 
     <div class="cat-head">
       <span class="eyebrow-sm">Categories</span>
+      <a class="manage-btn" href="<?= e($manageUrl) ?>">
+        <svg viewBox="0 0 24 24"><path d="M4 8h10M18 8h2M4 16h2M10 16h10"/><circle cx="16" cy="8" r="2"/><circle cx="8" cy="16" r="2"/></svg>Manage
+      </a>
     </div>
     <?php if ($view !== 'all'): ?>
       <p class="cat-note">Filtering within <?= e($viewNames[$view]) ?>.</p>
@@ -433,6 +547,13 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
   <!-- ================= Right panel ================= -->
   <aside class="panel" id="panel">
 
+    <!-- Mobile only: closes the sheet and goes back to the list -->
+    <a class="panel-close" href="<?= e(url(['task' => null, 'new' => null, 'edit' => null, 'del' => null])) ?>" aria-label="Back to tasks">
+      <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to tasks
+    </a>
+
+    <div class="panel-card">
+
     <?php if ($showEdit): // ---------- EDIT: pre-filled task form ---------- ?>
       <?php $color = $categories[$selected['cat']] ?? '#6c7086'; ?>
       <div class="panel-ic panel-ic-edit"><img src="../assets/icons/edit.png" alt="" style="width:18px;height:18px;"></div>
@@ -490,7 +611,8 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
         <div class="form-actions">
           <a class="btn btn-cancel" href="<?= e(url(['edit' => null, 'new' => null])) ?>">Cancel</a>
           <button type="submit" name="submit" class="btn btn-primary">
-            <img src="../assets/icons/edit-dark.png" alt="" style="width:15px;height:15px;">Save changes
+            <img class="d-only" src="../assets/icons/edit-dark.png" alt="" style="width:15px;height:15px;">
+            <svg class="i m-only" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Save changes
           </button>
         </div>
       </form>
@@ -523,13 +645,15 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
         <?php endforeach; ?>
         <button type="submit" class="status-box status-box-btn">
           <?= $selected['done'] ? 'Completed' : 'Not completed' ?>
+          <svg class="chev status-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
         </button>
       </form>
 
       <!-- Edit / Delete action buttons -->
       <div class="panel-actions">
         <a class="btn btn-outline btn-edit" href="<?= e(url(['edit' => 1, 'new' => null, 'del' => null])) ?>">
-          <img src="../assets/icons/edit.png" alt="" class="ed">Edit task
+          <img src="../assets/icons/edit.png" alt="" class="ed d-only">
+          <svg class="i m-only" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>Edit task
         </a>
         <a class="btn btn-danger btn-del" href="<?= e(url(['del' => 1, 'new' => null, 'edit' => null])) ?>">
           <img src="../assets/icons/delete-red.png" alt="" style="width:15px;height:15px;">Delete task
@@ -596,6 +720,7 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
         </div>
       </form>
     <?php endif; ?>
+    </div><!-- /.panel-card -->
   </aside>
 </div>
 
@@ -619,6 +744,104 @@ $bad = fn(string $field): string => isset($errors[$field]) ? ' bad' : '';
           <img src="../assets/icons/delete-red.png" alt="" style="width:15px;height:15px;">Delete task
         </button>
       </form>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if ($showManage): // ---- MANAGE CATEGORIES DIALOG ---- ?>
+<div class="overlay" id="manageOverlay" role="dialog" aria-modal="true" aria-labelledby="manageTitle">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="p-eyebrow">Organize your way</div>
+        <h2 id="manageTitle">Manage categories</h2>
+        <p>Create, rename, or remove task categories.</p>
+      </div>
+      <a class="icon-btn" id="manageClose" href="<?= e($closeManage) ?>" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </a>
+    </div>
+
+    <!-- New category -->
+    <form class="modal-sec" method="POST" novalidate>
+      <input type="hidden" name="action" value="cat_add">
+      <label class="lbl" for="cat_name">New category</label>
+      <div class="cat-add">
+        <input class="input<?= isset($catErrors['add']) ? ' bad' : '' ?>" type="text" id="cat_name" name="cat_name"
+               maxlength="20" placeholder="e.g. Health" value="<?= e($catOld['name']) ?>" autocomplete="off">
+        <button type="submit" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" class="i"><path d="M12 5v14M5 12h14"/></svg>Add
+        </button>
+      </div>
+      <?php if (isset($catErrors['add'])): ?><p class="err"><img src="../assets/icons/warning.png" alt=""><?= e($catErrors['add']) ?></p><?php endif; ?>
+      <div class="color-row">
+        <span class="color-lbl">Color</span>
+        <div class="swatches" role="radiogroup" aria-label="Category color">
+          <?php foreach ($palette as $hex): $on = $catOld['color'] === $hex; ?>
+            <label class="swatch<?= $on ? ' on' : '' ?>" style="--c:<?= e($hex) ?>">
+              <input class="sr-only" type="radio" name="cat_color" value="<?= e($hex) ?>"<?= $on ? ' checked' : '' ?>>
+              <svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            </label>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </form>
+
+    <!-- Existing categories -->
+    <div class="cat-list">
+      <?php foreach ($categories as $name => $color):
+        $name      = (string) $name;
+        $isDefault = $name === DEFAULT_CATEGORY;
+        $used      = count(array_filter($allTasks, fn($t) => $t['cat'] === $name));
+      ?>
+        <?php if ($renameName === $name): // inline rename ?>
+          <form class="cat-row" method="POST" novalidate>
+            <input type="hidden" name="action" value="cat_rename">
+            <input type="hidden" name="cat_orig" value="<?= e($name) ?>">
+            <i class="dot" style="--c:<?= e($color) ?>"></i>
+            <div class="info">
+              <input class="rename-input<?= isset($catErrors['rename']) ? ' bad' : '' ?>" type="text" name="cat_name" maxlength="20"
+                     value="<?= e(isset($catErrors['rename']) ? $catOld['rename'] : $name) ?>" autocomplete="off" aria-label="Category name">
+              <?php if (isset($catErrors['rename'])): ?><p class="err"><?= e($catErrors['rename']) ?></p><?php endif; ?>
+            </div>
+            <div class="acts">
+              <button type="submit" aria-label="Save name"><svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+              <a href="<?= e(url(['rename' => null, 'delcat' => null])) ?>" aria-label="Cancel"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></a>
+            </div>
+          </form>
+        <?php elseif ($delCatName === $name): // delete confirmation ?>
+          <div class="confirm-row">
+            <span>Delete <b><?= e($name) ?></b>?<?= $used ? ' Its ' . e(plural($used, 'task')) . ' will move to ' . e(DEFAULT_CATEGORY) . '.' : '' ?></span>
+            <div class="btns">
+              <a class="btn btn-outline" href="<?= e(url(['delcat' => null])) ?>">Cancel</a>
+              <form method="POST" style="margin:0">
+                <input type="hidden" name="action" value="cat_delete">
+                <input type="hidden" name="cat_orig" value="<?= e($name) ?>">
+                <button type="submit" class="btn btn-danger">Delete</button>
+              </form>
+            </div>
+          </div>
+        <?php else: // normal row ?>
+          <div class="cat-row">
+            <i class="dot" style="--c:<?= e($color) ?>"></i>
+            <div class="info">
+              <div class="nm"><?= e($name) ?></div>
+              <div class="ct"><?= e(plural($used, 'task')) ?><?= $isDefault ? ' · Default' : '' ?></div>
+            </div>
+            <?php if (!$isDefault): ?>
+              <div class="acts">
+                <a href="<?= e(url(['rename' => $name, 'delcat' => null])) ?>" aria-label="Rename <?= e($name) ?>">
+                  <svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>
+                </a>
+                <a href="<?= e(url(['delcat' => $name, 'rename' => null])) ?>" aria-label="Delete <?= e($name) ?>">
+                  <svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>
+                </a>
+              </div>
+            <?php endif; ?>
+          </div>
+        <?php endif; ?>
+      <?php endforeach; ?>
     </div>
   </div>
 </div>
