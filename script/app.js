@@ -3,6 +3,7 @@
    improves the experience in the browser. */
 document.addEventListener('DOMContentLoaded', () => {
   const $ = (s, r = document) => r.querySelector(s);
+  let discardOpen = false;   // true while the "Discard unsaved changes?" popup is showing
 
   /* ---------- Theme switcher (Catppuccin flavors) ---------- */
   const THEMES = { latte: 'Latte', frappe: 'Frappé', macchiato: 'Macchiato', mocha: 'Mocha' };
@@ -38,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('click', closeMenus);
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
+      if (discardOpen) return;   // Esc only closes the discard popup, not the dialog behind it
       closeMenus();
       // Close the delete overlay by following the Cancel link
       const cancel = $('#delCancel');
@@ -125,12 +127,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  document.addEventListener('click', e => {
+  // Styled "Discard unsaved changes?" popup (replaces the browser's confirm box).
+  // Resolves true = discard, false = keep editing.
+  function confirmDiscard() {
+    return new Promise(resolve => {
+      const ov = document.createElement('div');
+      ov.className = 'overlay';
+      ov.style.zIndex = '110';                          // above the Manage categories dialog
+      ov.setAttribute('role', 'alertdialog');
+      ov.setAttribute('aria-modal', 'true');
+      ov.setAttribute('aria-labelledby', 'discardTitle');
+      ov.innerHTML =
+        '<div class="dialog">' +
+          '<div class="dialog-icon dialog-icon-warn"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.2v.01"/></svg></div>' +
+          '<h2 id="discardTitle">Discard unsaved changes?</h2>' +
+          '<p>You have text that hasn’t been saved yet. If you continue, it will be lost.</p>' +
+          '<div class="dialog-actions">' +
+            '<button type="button" class="btn btn-outline" data-keep>Keep editing</button>' +
+            '<button type="button" class="btn btn-danger" data-discard>Discard</button>' +
+          '</div>' +
+        '</div>';
+
+      const finish = result => {
+        discardOpen = false;
+        document.removeEventListener('keydown', onKey, true);
+        ov.remove();
+        resolve(result);
+      };
+      const onKey = e => {
+        if (e.key !== 'Escape') return;
+        e.preventDefault();
+        e.stopImmediatePropagation();                   // don't let the global Esc handler close the dialog behind
+        finish(false);
+      };
+
+      discardOpen = true;
+      document.addEventListener('keydown', onKey, true);
+      ov.addEventListener('click', e => { if (e.target === ov) finish(false); });   // click outside = keep editing
+      ov.querySelector('[data-keep]').addEventListener('click', () => finish(false));
+      ov.querySelector('[data-discard]').addEventListener('click', () => finish(true));
+      document.body.appendChild(ov);
+      ov.querySelector('[data-keep]').focus();          // safest default
+    });
+  }
+
+  document.addEventListener('click', async e => {
     const a = e.target.closest('#manageOverlay .cat-list a[href]');
     if (!a) return;
     e.preventDefault();
     if (isDirty()) {
-      if (!confirm('Discard unsaved changes?')) return;
+      if (!(await confirmDiscard())) return;
       const add = $('#cat_name');
       if (add && !add.disabled) add.value = add.defaultValue;   // clear typed text so it isn't left half-entered
     }
@@ -140,8 +186,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // X button (and Esc, which calls .click() on it): warn before losing typed text
   const manageClose = $('#manageClose');
   if (manageClose) {
-    manageClose.addEventListener('click', e => {
-      if (isDirty() && !confirm('Discard unsaved changes?')) e.preventDefault();
+    manageClose.addEventListener('click', async e => {
+      if (!isDirty()) return;                           // nothing typed: just follow the link
+      e.preventDefault();
+      if (await confirmDiscard()) location.href = manageClose.href;
     });
   }
 
