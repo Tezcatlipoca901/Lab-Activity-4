@@ -177,9 +177,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 unset($t);
                 unset($_SESSION['categories'][$orig]);
+                $_SESSION['flash'] = ['type' => 'cat_deleted', 'title' => $orig];  // success popup
+                $back = ['manage' => null, 'rename' => null, 'delcat' => null];    // close Manage dialog so flash is visible
                 if (($_GET['cat'] ?? '') === $orig) $back['cat'] = null;  // don't keep filtering by a deleted category
             }
-            $_SESSION['no_anim'] = true;                                  // modal stays open: don't replay its open animation
             header('Location: ' . url($back));
             exit();
         }
@@ -386,13 +387,14 @@ $noAnim = !empty($_SESSION['no_anim']);
 unset($_SESSION['no_anim']);
 
 $flashText = [
-    'created' => ['Task created',  'was added to your list.'],
-    'updated' => ['Task updated',  'was updated successfully.'],
-    'deleted' => ['Task deleted',  'was removed from your list.'],
-    'cat_added' => ['Category added', 'was added to your categories.'],
-    'cat_updated' => ['Category updated', 'was updated successfully.'],
-    'completed' => ['Task completed', 'was marked as completed.'],
-    'reopened'  => ['Task reopened',  'was moved back to your active tasks.'],
+    'created'     => ['Task created',      'was added to your list.'],
+    'updated'     => ['Task updated',      'was updated successfully.'],
+    'deleted'     => ['Task deleted',      'was removed from your list.'],
+    'cat_added'   => ['Category added',    'was added to your categories.'],
+    'cat_updated' => ['Category updated',  'was updated successfully.'],
+    'cat_deleted' => ['Category deleted',  'was removed from your categories.'],
+    'completed'   => ['Task completed',    'was marked as completed.'],
+    'reopened'    => ['Task reopened',     'was moved back to your active tasks.'],
 ];
 
 // Sidebar counts: views respect the category filter, categories respect the view.
@@ -502,6 +504,11 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
     <label class="sr-only" for="q">Search tasks</label>
     <svg class="search-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input class="search" id="q" name="q" type="search" placeholder="Search tasks..." value="<?= e($search) ?>" autocomplete="off">
+    <?php if ($search !== ''): ?>
+      <a class="search-clear" href="<?= e(url(['q' => null])) ?>" aria-label="Clear search" title="Clear search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </a>
+    <?php endif; ?>
   </form>
 </header>
 

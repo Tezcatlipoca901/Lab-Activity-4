@@ -478,6 +478,14 @@ a.task:focus-visible, a.nav-item:focus-visible, a.btn:focus-visible { outline: 2
 .search-form { margin-left: auto; position: relative; }
 .search-form .search { margin-left: 0; }
 .search-ic { position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; margin-top: -8px; stroke: var(--overlay); pointer-events: none; }
+.search-clear {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; display: grid; place-items: center;
+  border-radius: 6px; color: var(--overlay); transition: color .15s, background .15s;
+}
+.search-clear:hover { color: var(--text); background: var(--s0); }
+.search-clear svg { width: 12px; height: 12px; stroke-width: 2.5; }
+.search:has(~ .search-clear) { padding-right: 34px; }
 
 /* Mobile-only controls (shown inside the 760px media query above) */
 .menu-btn { display: none; width: 36px; height: 36px; place-items: center; border-radius: 10px; color: var(--text); flex: none; }

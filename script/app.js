@@ -152,6 +152,33 @@ document.addEventListener('DOMContentLoaded', () => {
     confirmOk.form.addEventListener('submit', () => { confirmOk.disabled = true; });
   }
 
+  /* ---------- Search bar: live clear button ---------- */
+  const searchInput = $('#q');
+  if (searchInput) {
+    function updateSearchClear() {
+      let clearBtn = searchInput.parentElement.querySelector('.search-clear');
+      if (searchInput.value.trim() !== '') {
+        if (!clearBtn) {
+          clearBtn = document.createElement('a');
+          clearBtn.className = 'search-clear';
+          clearBtn.setAttribute('aria-label', 'Clear search');
+          clearBtn.setAttribute('title', 'Clear search');
+          clearBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+          clearBtn.addEventListener('click', e => {
+            e.preventDefault();
+            searchInput.value = '';
+            searchInput.focus();
+            updateSearchClear();
+          });
+          searchInput.after(clearBtn);
+        }
+      } else {
+        if (clearBtn) clearBtn.remove();
+      }
+    }
+    searchInput.addEventListener('input', updateSearchClear);
+  }
+
   /* ---------- Success modal (task created / updated / deleted) ---------- */
   const flash = $('#flashOverlay'), flashDone = $('#flashDone');
   if (flash && flashDone) {

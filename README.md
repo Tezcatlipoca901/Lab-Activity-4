@@ -4,8 +4,15 @@ A cozy, simple To-do List web app built with **PHP sessions**, HTML, CSS, and va
 
 Built for **COMP016 – Web Development, Lab Activity 4: PHP Integration with HTML Forms**.
 
-> **Group:** `<group name>`
-> **Members:** `<name 1>`, `<name 2>`, `<name 3>`, `<name 4>`
+> **Group:** `HONORABLE_CODE`
+> **Members:** ```
+    DE GUZMAN, CYRUS KENT, MARAV	
+    IGNACIO, RENZO MIGUEL, GALLARDO	
+    LUCBAN, MA. PAMELA	
+    PADILLA, MICHAEL JOSHUA, CAYANAN	
+    RECELLA, RAM MATHEW, FERRER	
+    REYES, MIKAELLA, FRANCISCO	
+    ZULUETA, GIAN CARLO, BASCO```
 
 ---
 
