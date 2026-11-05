@@ -23,11 +23,10 @@ $_SESSION['categories'] = $_SESSION['categories'] ?? [
 ];
 $categories = $_SESSION['categories'];
 
-$viewNames = ['all' => 'All tasks', 'today' => 'Today', 'overdue' => 'Overdue', 'week' => 'This week', 'month' => 'This month', 'year' => 'This year', 'nodue' => 'No due date'];
+$viewNames = ['all' => 'All tasks', 'today' => 'Today', 'week' => 'This week', 'month' => 'This month', 'year' => 'This year', 'nodue' => 'No due date'];
 $viewIcons = ['all' => 'all-tasks', 'today' => 'today', 'week' => 'week', 'month' => 'month', 'year' => 'year'];   // PNG icons from /assets
-// Overdue and No due date have no PNG, so they use small inline SVG icons (they take the text color, so they can turn red / purple).
+// No due date has no PNG, so it uses a small inline SVG icon (it takes the text color, so it can turn purple when active).
 $viewSvgs  = [
-    'overdue' => '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.2v.01"/>',
     'nodue'   => '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M9.5 15h5"/>',
 ];
 $sortNames = ['earliest' => 'Earliest first', 'latest' => 'Latest first', 'az' => 'Name A–Z', 'za' => 'Name Z–A'];
@@ -91,7 +90,6 @@ function inView(array $task, string $view): bool
 
     switch ($view) {
         case 'today': return $due === $today;
-        case 'overdue': return isOverdue($task);
         case 'week':  return $due >= strtotime('monday this week', $today) && $due <= strtotime('sunday this week', $today);
         case 'month': return date('Y-m', $due) === date('Y-m', $today);
         case 'year':  return date('Y', $due) === date('Y', $today);
@@ -119,7 +117,7 @@ function url(array $changes = []): string
 /* ---------- Filters from the query string (GET) ---------- */
 $view      = in_array($_GET['view'] ?? 'all', array_keys($viewNames), true) ? ($_GET['view'] ?? 'all') : 'all';
 $catFilter = isset($_GET['cat']) && isset($categories[$_GET['cat']]) ? $_GET['cat'] : null;
-$status    = in_array($_GET['status'] ?? 'all', ['all', 'active', 'completed'], true) ? ($_GET['status'] ?? 'all') : 'all';
+$status    = in_array($_GET['status'] ?? 'all', ['all', 'active', 'completed', 'overdue'], true) ? ($_GET['status'] ?? 'all') : 'all';
 $sort      = isset($sortNames[$_GET['sort'] ?? '']) ? $_GET['sort'] : 'earliest';
 $search    = trim($_GET['q'] ?? '');
 
@@ -223,7 +221,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($t['cat'] === $orig) $t['cat'] = $name;
                 }
                 unset($t);
-                if (($_GET['cat'] ?? '') === $orig) $back['cat'] = $name;
+                $_SESSION['flash'] = ['type' => 'cat_updated', 'title' => $name];     // success popup
+                $back = ['manage' => null, 'rename' => null, 'delcat' => null];       // close the Manage dialog
+                if (($_GET['cat'] ?? '') === $orig) $back['cat'] = $name;             // keep filtering by the renamed category
             }
             header('Location: ' . url($back));
             exit();
@@ -384,6 +384,7 @@ $flashText = [
     'updated' => ['Task updated',  'was updated successfully.'],
     'deleted' => ['Task deleted',  'was removed from your list.'],
     'cat_added' => ['Category added', 'was added to your categories.'],
+    'cat_updated' => ['Category updated', 'was updated successfully.'],
     'completed' => ['Task completed', 'was marked as completed.'],
     'reopened'  => ['Task reopened',  'was moved back to your active tasks.'],
 ];
@@ -411,12 +412,14 @@ $statusCounts = [
     'all'       => count($base),
     'active'    => count(array_filter($base, fn($t) => !$t['done'])),
     'completed' => count(array_filter($base, fn($t) => $t['done'])),
+    'overdue'   => count(array_filter($base, 'isOverdue')),
 ];
 
 // Then apply the status tab.
 $tasks = array_filter($base, function ($t) use ($status) {
     if ($status === 'active') return !$t['done'];
     if ($status === 'completed') return $t['done'];
+    if ($status === 'overdue') return isOverdue($t);
     return true;
 });
 
@@ -514,15 +517,14 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
 
     <nav class="views">
       <?php foreach ($viewNames as $key => $label): $active = $view === $key; ?>
-        <?php $alert = $key === 'overdue' && $viewCounts[$key] > 0;   // red when something is late ?>
-        <a class="nav-item<?= $active ? ' active' : '' ?><?= $alert ? ' is-alert' : '' ?>" href="<?= e(url(['view' => $key])) ?>">
+        <a class="nav-item<?= $active ? ' active' : '' ?>" href="<?= e(url(['view' => $key])) ?>">
           <?php if (isset($viewIcons[$key])): ?>
             <img src="../assets/icons/<?= $viewIcons[$key] . ($active ? '-active' : '') ?>.png" alt="">
           <?php else: ?>
             <svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><?= $viewSvgs[$key] ?></svg>
           <?php endif; ?>
           <span><?= e($label) ?></span>
-          <b class="count<?= $alert ? ' count-red' : '' ?>"><?= $viewCounts[$key] ?></b>
+          <b class="count"><?= $viewCounts[$key] ?></b>
         </a>
       <?php endforeach; ?>
     </nav>
@@ -570,12 +572,13 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
             'all'       => ['All',       '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>'],
             'active'    => ['Active',    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/>'],
             'completed' => ['Completed', '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.8"/>'],
+            'overdue'   => ['Overdue',   '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.2v.01"/>'],
         ];
         foreach ($tabs as $key => [$label, $icon]): ?>
           <a class="tab tab-<?= $key ?><?= $status === $key ? ' active' : '' ?>" role="tab" href="<?= e(url(['status' => $key])) ?>">
             <svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><?= $icon ?></svg>
             <span><?= $label ?></span>
-            <b class="tab-count"><?= $statusCounts[$key] ?></b>
+            <b class="tab-count<?= $key === 'overdue' && $statusCounts[$key] > 0 ? ' tab-count-red' : '' ?>"><?= $statusCounts[$key] ?></b>
           </a>
         <?php endforeach; ?>
       </div>
