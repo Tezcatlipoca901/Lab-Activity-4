@@ -141,11 +141,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     /* ---- TOGGLE ---- */
     if ($action === 'toggle') {
-        $tid = (int) ($_POST['task_id'] ?? 0);
+        $tid      = (int) ($_POST['task_id'] ?? 0);
+        $fromList = ($_POST['from'] ?? '') === 'list';     // came from the checkbox on a task card (after the confirm popup)
         if (isset($_SESSION['tasks'][$tid])) {
             $_SESSION['tasks'][$tid]['done'] = !$_SESSION['tasks'][$tid]['done'];
+            if ($fromList) {
+                $_SESSION['flash'] = ['type' => $_SESSION['tasks'][$tid]['done'] ? 'completed' : 'reopened', 'title' => $_SESSION['tasks'][$tid]['title']];
+            }
         }
-        header('Location: ' . url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null]));
+        // From the list: stay on the list. From the details panel: keep showing that task.
+        header('Location: ' . ($fromList
+            ? url(['new' => null, 'edit' => null, 'del' => null])
+            : url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null])));
         exit();
     }
 
@@ -204,6 +211,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($msg === '') {
             if ($action === 'cat_add') {
                 $_SESSION['categories'][$name] = $color;
+                $_SESSION['flash'] = ['type' => 'cat_added', 'title' => $name];        // success popup, like "Task created"
+                $back = ['manage' => null, 'rename' => null, 'delcat' => null];       // close the Manage dialog
             } else {
                 $renamed = [];                                            // rebuild so the order is kept
                 foreach ($_SESSION['categories'] as $k => $c) {
@@ -343,6 +352,11 @@ $showEdit   = $selected !== null && isset($_GET['edit']) && $_GET['edit'] === '1
 $showDel    = $selected !== null && isset($_GET['del'])  && $_GET['del']  === '1';
 $showDetail = $selected !== null && !isset($_GET['new']) && !$showEdit && $_SERVER['REQUEST_METHOD'] !== 'POST';
 
+// Checkbox on a task card: ?confirm=ID opens the "Mark as completed?" popup (not kept by url(), so it goes away on any other link).
+$confirmId   = isset($_GET['confirm']) ? (int) $_GET['confirm'] : 0;
+$confirmTask = $_SESSION['tasks'][$confirmId] ?? null;
+$showConfirm = $confirmTask !== null && !$showDel && $_SERVER['REQUEST_METHOD'] !== 'POST';
+
 // If we're returning from a failed UPDATE, pre-fill the form with the submitted values
 if ($errors && isset($_GET['edit'])) {
     $showEdit   = true;
@@ -369,6 +383,9 @@ $flashText = [
     'created' => ['Task created',  'was added to your list.'],
     'updated' => ['Task updated',  'was updated successfully.'],
     'deleted' => ['Task deleted',  'was removed from your list.'],
+    'cat_added' => ['Category added', 'was added to your categories.'],
+    'completed' => ['Task completed', 'was marked as completed.'],
+    'reopened'  => ['Task reopened',  'was moved back to your active tasks.'],
 ];
 
 // Sidebar counts: views respect the category filter, categories respect the view.
@@ -600,6 +617,9 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
                 <div class="task-desc"><?= e($task['desc']) ?></div>
               </div>
             </a>
+            <!-- Checkbox hit area: a separate link on top of the card (links can't be nested), opens the confirm popup -->
+            <?php $checkLabel = ($task['done'] ? 'Mark as not completed: ' : 'Mark as completed: ') . $task['title']; ?>
+            <a class="check-link" href="<?= e(url(['confirm' => $task['id'], 'del' => null])) ?>" aria-label="<?= e($checkLabel) ?>" title="<?= e($task['done'] ? 'Mark as not completed' : 'Mark as completed') ?>"></a>
           </li>
         <?php endforeach; ?>
       </ul>
@@ -827,6 +847,35 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
         <button type="submit" class="btn btn-danger">
           <img src="../assets/icons/delete-red.png" alt="" style="width:15px;height:15px;">Delete task
         </button>
+      </form>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if ($showConfirm && !$showManage): // ---- CONFIRM: mark as completed / not completed (task card checkbox) ---- ?>
+<?php $toDone = !$confirmTask['done']; ?>
+<div class="overlay" id="confirmOverlay" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+  <div class="dialog">
+    <div class="dialog-icon <?= $toDone ? 'dialog-icon-ok' : 'dialog-icon-warn' ?>">
+      <?php if ($toDone): ?>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5.5 12.5 4.2 4.2L18.5 8"/></svg>
+      <?php else: ?>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>
+      <?php endif; ?>
+    </div>
+    <h2 id="confirmTitle"><?= $toDone ? 'Mark as completed?' : 'Mark as not completed?' ?></h2>
+    <p>
+      <strong><?= e($confirmTask['title']) ?></strong>
+      <?= $toDone ? 'will be marked as completed. You can change this anytime.' : 'will be moved back to your active tasks.' ?>
+    </p>
+    <div class="dialog-actions">
+      <a class="btn btn-outline" id="confirmCancel" href="<?= e(url()) ?>">Cancel</a>
+      <form method="POST" style="margin:0">
+        <input type="hidden" name="action"  value="toggle">
+        <input type="hidden" name="task_id" value="<?= e($confirmId) ?>">
+        <input type="hidden" name="from"    value="list">
+        <button type="submit" class="btn btn-primary" id="confirmOk"><?= $toDone ? 'Mark as completed' : 'Mark as not completed' ?></button>
       </form>
     </div>
   </div>

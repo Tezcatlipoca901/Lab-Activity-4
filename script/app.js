@@ -42,6 +42,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // Close the delete overlay by following the Cancel link
       const cancel = $('#delCancel');
       if (cancel) cancel.click();
+      // ...and the "Mark as completed?" popup
+      const confirmCancel = $('#confirmCancel');
+      if (confirmCancel) confirmCancel.click();
       // ...and the Manage categories dialog
       const manageClose = $('#manageClose');
       if (manageClose) manageClose.click();
@@ -79,6 +82,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const badCatInput = $('.cat-add .input.bad');
   if (renameInput) { renameInput.focus(); renameInput.select(); }
   else if (badCatInput) badCatInput.focus();
+
+  /* ---------- "Mark as completed?" popup: focus the confirm button, prevent double submit ---------- */
+  const confirmOk = $('#confirmOk');
+  if (confirmOk) {
+    confirmOk.focus();
+    confirmOk.form.addEventListener('submit', () => { confirmOk.disabled = true; });
+  }
 
   /* ---------- Success modal (task created / updated / deleted) ---------- */
   const flash = $('#flashOverlay'), flashDone = $('#flashDone');
