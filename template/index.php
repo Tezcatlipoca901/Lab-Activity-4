@@ -23,8 +23,13 @@ $_SESSION['categories'] = $_SESSION['categories'] ?? [
 ];
 $categories = $_SESSION['categories'];
 
-$viewNames = ['all' => 'All tasks', 'today' => 'Today', 'week' => 'This week', 'month' => 'This month', 'year' => 'This year'];
-$viewIcons = ['all' => 'all-tasks', 'today' => 'today', 'week' => 'week', 'month' => 'month', 'year' => 'year'];
+$viewNames = ['all' => 'All tasks', 'today' => 'Today', 'overdue' => 'Overdue', 'week' => 'This week', 'month' => 'This month', 'year' => 'This year', 'nodue' => 'No due date'];
+$viewIcons = ['all' => 'all-tasks', 'today' => 'today', 'week' => 'week', 'month' => 'month', 'year' => 'year'];   // PNG icons from /assets
+// Overdue and No due date have no PNG, so they use small inline SVG icons (they take the text color, so they can turn red / purple).
+$viewSvgs  = [
+    'overdue' => '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.2v.01"/>',
+    'nodue'   => '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M9.5 15h5"/>',
+];
 $sortNames = ['earliest' => 'Earliest first', 'latest' => 'Latest first', 'az' => 'Name A–Z', 'za' => 'Name Z–A'];
 
 /* ---------- Session storage ---------- */
@@ -49,10 +54,36 @@ function plural(int $n, string $word): string
     return $n . ' ' . $word . ($n === 1 ? '' : 's');
 }
 
-// Is the task's due date inside the chosen view (today / week / month / year)?
+// The little status pill: Overdue (red) / Active (amber) / Completed (green)
+function statusPill(string $state): string
+{
+    $pills = [
+        'overdue'   => ['Overdue',   '<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.2v.01"/>'],
+        'active'    => ['Active',    '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4"/>'],
+        'completed' => ['Completed', '<path d="m5.5 12.5 4.2 4.2L18.5 8"/>'],
+    ];
+    [$label, $icon] = $pills[$state];
+    return '<span class="pill pill-' . $state . '"><svg viewBox="0 0 24 24" aria-hidden="true">' . $icon . '</svg>' . $label . '</span>';
+}
+
+// Is an unfinished task past its due date?
+function isOverdue(array $task): bool
+{
+    return !$task['done'] && $task['due'] !== '' && strtotime($task['due']) < strtotime('today');
+}
+
+// One of: completed | overdue | active  (drives the pills, colors and icons)
+function taskState(array $task): string
+{
+    if ($task['done']) return 'completed';
+    return isOverdue($task) ? 'overdue' : 'active';
+}
+
+// Is the task inside the chosen view (all / today / overdue / week / month / year / no due date)?
 function inView(array $task, string $view): bool
 {
     if ($view === 'all') return true;
+    if ($view === 'nodue') return $task['due'] === '';
     if ($task['due'] === '') return false;
 
     $due   = strtotime($task['due']);
@@ -60,6 +91,7 @@ function inView(array $task, string $view): bool
 
     switch ($view) {
         case 'today': return $due === $today;
+        case 'overdue': return isOverdue($task);
         case 'week':  return $due >= strtotime('monday this week', $today) && $due <= strtotime('sunday this week', $today);
         case 'month': return date('Y-m', $due) === date('Y-m', $today);
         case 'year':  return date('Y', $due) === date('Y', $today);
@@ -120,7 +152,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     /* ---- DELETE ---- */
     if ($action === 'delete') {
         $tid = (int) ($_POST['task_id'] ?? 0);
-        unset($_SESSION['tasks'][$tid]);
+        if (isset($_SESSION['tasks'][$tid])) {
+            $_SESSION['flash'] = ['type' => 'deleted', 'title' => $_SESSION['tasks'][$tid]['title']];   // shown once in the success modal
+            unset($_SESSION['tasks'][$tid]);
+        }
         header('Location: ' . url(['task' => null, 'new' => null, 'edit' => null, 'del' => null]));
         exit();
     }
@@ -235,6 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['tasks'][$tid]['desc']  = $old['desc'];
             $_SESSION['tasks'][$tid]['due']   = $old['due'];
             $_SESSION['tasks'][$tid]['cat']   = $old['cat'];
+            $_SESSION['flash'] = ['type' => 'updated', 'title' => $old['title']];
             header('Location: ' . url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null]));
             exit();
         }
@@ -291,6 +327,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'due'   => $old['due'],
                 'done'  => false,
             ];
+            $_SESSION['flash'] = ['type' => 'created', 'title' => $old['title']];
             header('Location: ' . url(['task' => $id, 'new' => null]));
             exit();
         }
@@ -325,6 +362,15 @@ if ($showEdit && !$errors) {
 
 $allTasks = $_SESSION['tasks'];
 
+// Success message left by CREATE / UPDATE / DELETE. Read it once, then remove it so a refresh doesn't show it again.
+$flash = $_SESSION['flash'] ?? null;
+unset($_SESSION['flash']);
+$flashText = [
+    'created' => ['Task created',  'was added to your list.'],
+    'updated' => ['Task updated',  'was updated successfully.'],
+    'deleted' => ['Task deleted',  'was removed from your list.'],
+];
+
 // Sidebar counts: views respect the category filter, categories respect the view.
 $viewCounts = [];
 foreach ($viewNames as $key => $label) {
@@ -335,13 +381,25 @@ foreach ($categories as $name => $color) {
     $catCounts[$name] = count(array_filter($allTasks, fn($t) => $t['cat'] === $name && inView($t, $view)));
 }
 
-// Apply view, category, status and search filters.
-$tasks = array_filter($allTasks, function ($t) use ($view, $catFilter, $status, $search) {
+// Apply view, category and search filters first...
+$base = array_filter($allTasks, function ($t) use ($view, $catFilter, $search) {
     if (!inView($t, $view)) return false;
     if ($catFilter && $t['cat'] !== $catFilter) return false;
-    if ($status === 'active' && $t['done']) return false;
-    if ($status === 'completed' && !$t['done']) return false;
     if ($search !== '' && stripos($t['title'] . ' ' . $t['desc'], $search) === false) return false;
+    return true;
+});
+
+// ...so the All / Active / Completed tabs can show how many tasks each one holds.
+$statusCounts = [
+    'all'       => count($base),
+    'active'    => count(array_filter($base, fn($t) => !$t['done'])),
+    'completed' => count(array_filter($base, fn($t) => $t['done'])),
+];
+
+// Then apply the status tab.
+$tasks = array_filter($base, function ($t) use ($status) {
+    if ($status === 'active') return !$t['done'];
+    if ($status === 'completed') return $t['done'];
     return true;
 });
 
@@ -439,10 +497,15 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
 
     <nav class="views">
       <?php foreach ($viewNames as $key => $label): $active = $view === $key; ?>
-        <a class="nav-item<?= $active ? ' active' : '' ?>" href="<?= e(url(['view' => $key])) ?>">
-          <img src="../assets/icons/<?= $viewIcons[$key] . ($active ? '-active' : '') ?>.png" alt="">
+        <?php $alert = $key === 'overdue' && $viewCounts[$key] > 0;   // red when something is late ?>
+        <a class="nav-item<?= $active ? ' active' : '' ?><?= $alert ? ' is-alert' : '' ?>" href="<?= e(url(['view' => $key])) ?>">
+          <?php if (isset($viewIcons[$key])): ?>
+            <img src="../assets/icons/<?= $viewIcons[$key] . ($active ? '-active' : '') ?>.png" alt="">
+          <?php else: ?>
+            <svg class="nav-ic" viewBox="0 0 24 24" aria-hidden="true"><?= $viewSvgs[$key] ?></svg>
+          <?php endif; ?>
           <span><?= e($label) ?></span>
-          <b class="count"><?= $viewCounts[$key] ?></b>
+          <b class="count<?= $alert ? ' count-red' : '' ?>"><?= $viewCounts[$key] ?></b>
         </a>
       <?php endforeach; ?>
     </nav>
@@ -484,8 +547,19 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
 
     <div class="toolbar">
       <div class="tabs" role="tablist">
-        <?php foreach (['all' => 'All', 'active' => 'Active', 'completed' => 'Completed'] as $key => $label): ?>
-          <a class="tab<?= $status === $key ? ' active' : '' ?>" role="tab" href="<?= e(url(['status' => $key])) ?>"><?= $label ?></a>
+        <?php
+        // Each tab has its own icon + color so Active and Completed are easy to tell apart.
+        $tabs = [
+            'all'       => ['All',       '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>'],
+            'active'    => ['Active',    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/>'],
+            'completed' => ['Completed', '<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16 9.8"/>'],
+        ];
+        foreach ($tabs as $key => [$label, $icon]): ?>
+          <a class="tab tab-<?= $key ?><?= $status === $key ? ' active' : '' ?>" role="tab" href="<?= e(url(['status' => $key])) ?>">
+            <svg class="tab-ic" viewBox="0 0 24 24" aria-hidden="true"><?= $icon ?></svg>
+            <span><?= $label ?></span>
+            <b class="tab-count"><?= $statusCounts[$key] ?></b>
+          </a>
         <?php endforeach; ?>
       </div>
       <div class="sort">
@@ -507,17 +581,20 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
     <?php if ($tasks): ?>
       <ul class="task-list">
         <?php foreach ($tasks as $task): // dynamic rendering with a PHP loop ?>
-          <?php $color = $categories[$task['cat']] ?? '#6c7086'; ?>
+          <?php $color = $categories[$task['cat']] ?? '#6c7086'; $state = taskState($task); ?>
           <li>
-            <a class="task<?= $task['done'] ? ' done' : '' ?><?= ($showDetail && $selectedId === $task['id']) ? ' selected' : '' ?>"
+            <a class="task<?= $task['done'] ? ' done' : '' ?><?= $state === 'overdue' ? ' overdue' : '' ?><?= ($showDetail && $selectedId === $task['id']) ? ' selected' : '' ?>"
                href="<?= e(url(['task' => $task['id'], 'new' => null, 'edit' => null, 'del' => null])) ?>">
-              <span class="check-static"><img src="../assets/icons/<?= $task['done'] ? 'check-on' : 'check-off' ?>.png" alt="<?= $task['done'] ? 'Completed' : 'Not completed' ?>"></span>
+              <span class="check-static state-<?= $state ?>" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="6"/><?php if ($task['done']): ?><path d="m7.5 12.5 3 3 6-6.5"/><?php endif; ?></svg>
+              </span>
               <div class="task-body">
                 <div class="task-top">
                   <div class="task-title"><?= e($task['title']) ?></div>
                   <div class="task-meta">
+                    <?= statusPill($state) ?>
                     <span class="chip<?= $task['cat'] === DEFAULT_CATEGORY ? ' plain' : '' ?>" style="--c:<?= e($color) ?>"><?= e($task['cat']) ?></span>
-                    <span class="date"><img src="../assets/icons/calendar.png" alt=""><?= e(formatDate($task['due'])) ?></span>
+                    <span class="date<?= $state === 'overdue' ? ' date-overdue' : '' ?>"><img src="../assets/icons/calendar.png" alt=""><?= e(formatDate($task['due'])) ?></span>
                   </div>
                 </div>
                 <div class="task-desc"><?= e($task['desc']) ?></div>
@@ -618,19 +695,20 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
       </form>
 
     <?php elseif ($showDetail): // ---------- READ: task details ---------- ?>
-      <?php $color = $categories[$selected['cat']] ?? '#6c7086'; ?>
+      <?php $color = $categories[$selected['cat']] ?? '#6c7086'; $state = taskState($selected); ?>
       <div class="detail-head">
         <div>
           <div class="p-eyebrow">Task details</div>
           <h2><?= e($selected['title']) ?></h2>
         </div>
-        <span class="status-ring<?= $selected['done'] ? ' on' : '' ?>" aria-hidden="true">
+        <span class="status-ring state-<?= $state ?><?= $selected['done'] ? ' on' : '' ?>" aria-hidden="true">
           <svg viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
         </span>
       </div>
       <div class="detail-meta">
+        <?= statusPill($state) ?>
         <span class="chip" style="--c:<?= e($color) ?>"><?= e($selected['cat']) ?></span>
-        <span class="date"><img src="../assets/icons/calendar.png" alt=""><?= e(formatDate($selected['due'])) ?></span>
+        <span class="date<?= $state === 'overdue' ? ' date-overdue' : '' ?>"><img src="../assets/icons/calendar.png" alt=""><?= e(formatDate($selected['due'])) ?></span>
       </div>
       <div class="sec-title">Description</div>
       <p class="detail-desc"><?= e($selected['desc']) ?></p>
@@ -643,10 +721,16 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
         <?php foreach (['view' => $view === 'all' ? '' : $view, 'cat' => $catFilter, 'status' => $status === 'all' ? '' : $status, 'sort' => $sort === 'earliest' ? '' : $sort, 'task' => $selectedId, 'q' => $search] as $k => $v): ?>
           <?php if ($v): ?><input type="hidden" name="<?= e($k) ?>" value="<?= e($v) ?>"><?php endif; ?>
         <?php endforeach; ?>
-        <button type="submit" class="status-box status-box-btn">
-          <?= $selected['done'] ? 'Completed' : 'Not completed' ?>
-          <svg class="chev status-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        <?php $nextLabel = $selected['done'] ? 'Mark as not completed' : 'Mark as completed'; ?>
+        <button type="submit" class="status-box status-box-btn status-<?= $state ?>" title="<?= e($nextLabel) ?>">
+          <span class="status-dot"></span>
+          <span class="status-label"><?= $selected['done'] ? 'Completed' : 'Not completed' ?></span>
+          <span class="status-action">
+            <span class="status-action-text"><?= e($nextLabel) ?></span>
+            <svg class="status-swap" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg>
+          </span>
         </button>
+        <p class="status-hint">Click to switch between Completed and Not completed.</p>
       </form>
 
       <!-- Edit / Delete action buttons -->
@@ -745,6 +829,22 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
         </button>
       </form>
     </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if ($flash && isset($flashText[$flash['type']])): // ---- SUCCESS MODAL (created / updated / deleted) ---- ?>
+<div class="overlay" id="flashOverlay" role="alertdialog" aria-modal="true" aria-labelledby="flashTitle">
+  <div class="dialog dialog-success">
+    <div class="dialog-icon dialog-icon-ok">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5.5 12.5 4.2 4.2L18.5 8"/></svg>
+    </div>
+    <h2 id="flashTitle"><?= e($flashText[$flash['type']][0]) ?></h2>
+    <p><strong><?= e($flash['title']) ?></strong> <?= e($flashText[$flash['type']][1]) ?></p>
+    <div class="dialog-actions">
+      <a class="btn btn-primary" id="flashDone" href="<?= e(url()) ?>">Done</a>
+    </div>
+    <div class="flash-bar" aria-hidden="true"><span></span></div>
   </div>
 </div>
 <?php endif; ?>

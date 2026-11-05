@@ -80,6 +80,23 @@ document.addEventListener('DOMContentLoaded', () => {
   if (renameInput) { renameInput.focus(); renameInput.select(); }
   else if (badCatInput) badCatInput.focus();
 
+  /* ---------- Success modal (task created / updated / deleted) ---------- */
+  const flash = $('#flashOverlay'), flashDone = $('#flashDone');
+  if (flash && flashDone) {
+    let timer;
+    const onKey = e => { if (e.key === 'Escape') closeFlash(); };
+    function closeFlash() {
+      clearTimeout(timer);
+      document.removeEventListener('keydown', onKey);
+      flash.remove();
+    }
+    flashDone.addEventListener('click', e => { e.preventDefault(); closeFlash(); });   // no reload needed
+    flash.addEventListener('click', e => { if (e.target === flash) closeFlash(); });   // click outside
+    document.addEventListener('keydown', onKey);
+    timer = setTimeout(closeFlash, 3200);                                              // matches the progress bar
+    flashDone.focus();
+  }
+
   /* ---------- Task form helpers (create + edit) ---------- */
   const form = $('#taskForm');
   if (!form) return;

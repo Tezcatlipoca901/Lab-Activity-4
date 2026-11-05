@@ -494,3 +494,101 @@ label.swatch { cursor: pointer; }
 .cat-add + .err, .cat-row .info .err { margin-top: 6px; }
 .modal-sec .cat-add + .err { margin-top: 8px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* =====================================================================
+   QA improvements
+   ===================================================================== */
+
+/* Status colors – same meaning everywhere:  amber = active, green = completed, red = overdue */
+:root, [data-theme="mocha"] { --yellow: #f9e2af; }
+[data-theme="macchiato"]    { --yellow: #eed49f; }
+[data-theme="frappe"]       { --yellow: #e5c890; }
+[data-theme="latte"]        { --yellow: #df8e1d; }
+
+/* ---------- Sidebar: Overdue + No due date ---------- */
+.nav-item .nav-ic { width: 15px; height: 15px; flex: none; stroke-width: 1.8; }
+.nav-item.active .nav-ic { color: var(--mauve); }
+.nav-item.is-alert .nav-ic { color: var(--red); }
+.nav-item.is-alert span { color: color-mix(in srgb, var(--red) 55%, var(--sub)); }
+.nav-item.is-alert.active span { color: var(--text); }
+.count-red { background: color-mix(in srgb, var(--red) 18%, var(--mantle)); color: var(--red); }
+.nav-item.active .count-red { background: color-mix(in srgb, var(--red) 18%, var(--crust)); }
+
+/* ---------- Tabs: icons + counts ---------- */
+.tab { gap: 8px; }
+.tab-ic { width: 15px; height: 15px; flex: none; stroke-width: 2; }
+.tab-active .tab-ic { color: var(--yellow); }
+.tab-completed .tab-ic { color: var(--green); }
+.tab-count {
+  min-width: 20px; height: 19px; padding: 0 6px; display: grid; place-items: center;
+  font-size: 11.5px; font-weight: 600; border-radius: 6px; background: var(--base); color: var(--sub);
+}
+.tab.active .tab-count { background: var(--crust); color: var(--text); }
+
+/* ---------- Status pills ---------- */
+.pill {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  font-size: 12px; font-weight: 600; line-height: 1.35; padding: 3px 9px 3px 7px; border-radius: 999px;
+  color: var(--pc); background: color-mix(in srgb, var(--pc) 13%, var(--mantle));
+  border: 1px solid color-mix(in srgb, var(--pc) 28%, transparent);
+}
+.pill svg { width: 12px; height: 12px; stroke-width: 2.3; flex: none; }
+.pill-active    { --pc: var(--yellow); }
+.pill-completed { --pc: var(--green); }
+.pill-overdue   { --pc: var(--red); }
+.date-overdue { color: var(--red); }
+
+/* ---------- Task rows: checkbox shows the state ---------- */
+.check-static svg { width: 22px; height: 22px; display: block; }
+.check-static rect { fill: var(--base); stroke: var(--s1); stroke-width: 1.6; }
+.check-static path { stroke: var(--on-accent); stroke-width: 3; }
+.check-static.state-overdue rect { stroke: color-mix(in srgb, var(--red) 75%, var(--s1)); }
+.check-static.state-completed rect { fill: var(--green); stroke: var(--green); }
+.task.overdue:not(.selected) { border-color: color-mix(in srgb, var(--red) 32%, var(--s0)); }
+.task.done .chip, .task.done .date { opacity: .75; }
+
+/* ---------- Right panel: colored, clearly clickable status ---------- */
+.status-ring.state-active  { border-color: var(--yellow); }
+.status-ring.state-overdue { border-color: var(--red); }
+.detail-meta { flex-wrap: wrap; gap: 10px 12px; }
+
+.status-box-btn {
+  --sc: var(--yellow);
+  display: flex; align-items: center; gap: 11px; cursor: pointer;
+  border-color: color-mix(in srgb, var(--sc) 45%, var(--s0));
+  background: color-mix(in srgb, var(--sc) 9%, var(--mantle));
+  color: var(--text);
+  transition: border-color .15s, background .15s, transform .12s, box-shadow .15s;
+}
+.status-box-btn.status-completed { --sc: var(--green); }
+.status-box-btn.status-overdue   { --sc: var(--red); }
+.status-box-btn:hover {
+  border-color: var(--sc); background: color-mix(in srgb, var(--sc) 16%, var(--mantle));
+  transform: translateY(-1px); box-shadow: 0 6px 18px color-mix(in srgb, var(--sc) 16%, transparent);
+}
+.status-box-btn:active { transform: translateY(0); }
+.status-box-btn:focus-visible { outline: 2px solid var(--sc); outline-offset: 2px; }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--sc); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sc) 24%, transparent); }
+.status-label { font-weight: 600; color: var(--sc); }
+.status-action { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--sub); }
+.status-box-btn:hover .status-action { color: var(--text); }
+.status-swap { width: 16px; height: 16px; stroke-width: 2; flex: none; }
+.status-hint { font-size: 12px; color: var(--overlay); margin-top: 8px; }
+
+/* ---------- Success modal ---------- */
+.dialog-success { position: relative; overflow: hidden; }
+.dialog-icon-ok { background: color-mix(in srgb, var(--green) 16%, var(--base)); color: var(--green); }
+.dialog-icon-ok svg { width: 20px; height: 20px; stroke-width: 2.6; }
+.flash-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: color-mix(in srgb, var(--green) 15%, transparent); }
+.flash-bar span { display: block; height: 100%; background: var(--green); transform-origin: left; animation: flashbar 3.2s linear forwards; }
+@keyframes flashbar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .flash-bar span { animation: none; } }
+
+/* ---------- Small screens ---------- */
+@media (max-width: 760px) {
+  .tab, .tab:first-child { gap: 6px; font-size: 14px; padding: 0 4px; }
+  .tab-count { display: none; }
+  .task-meta { flex-wrap: wrap; row-gap: 6px; }
+  .status-action-text { display: none; }
+  .status-box-btn { gap: 10px; }
+}
