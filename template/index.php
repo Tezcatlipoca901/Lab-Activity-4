@@ -149,8 +149,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         // From the list: stay on the list. From the details panel: keep showing that task.
         header('Location: ' . ($fromList
-            ? url(['new' => null, 'edit' => null, 'del' => null])
-            : url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null])));
+            ? url(['new' => null, 'edit' => null, 'del' => null, 'manage' => null, 'rename' => null, 'delcat' => null])
+                : url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null, 'manage' => null, 'rename' => null, 'delcat' => null])));
         exit();
     }
 
@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash'] = ['type' => 'deleted', 'title' => $_SESSION['tasks'][$tid]['title']];   // shown once in the success modal
             unset($_SESSION['tasks'][$tid]);
         }
-        header('Location: ' . url(['task' => null, 'new' => null, 'edit' => null, 'del' => null]));
+        header('Location: ' . url(['task' => null, 'new' => null, 'edit' => null, 'del' => null, 'manage' => null, 'rename' => null, 'delcat' => null]));
         exit();
     }
 
@@ -179,6 +179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 unset($_SESSION['categories'][$orig]);
                 if (($_GET['cat'] ?? '') === $orig) $back['cat'] = null;  // don't keep filtering by a deleted category
             }
+            $_SESSION['no_anim'] = true;                                  // modal stays open: don't replay its open animation
             header('Location: ' . url($back));
             exit();
         }
@@ -280,7 +281,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['tasks'][$tid]['due']   = $old['due'];
             $_SESSION['tasks'][$tid]['cat']   = $old['cat'];
             $_SESSION['flash'] = ['type' => 'updated', 'title' => $old['title']];
-            header('Location: ' . url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null]));
+            header('Location: ' . url(['task' => $tid, 'new' => null, 'edit' => null, 'del' => null, 'manage' => null, 'rename' => null, 'delcat' => null]));
             exit();
         }
         // Fall through to re-render the edit form with errors
@@ -379,6 +380,11 @@ $allTasks = $_SESSION['tasks'];
 // Success message left by CREATE / UPDATE / DELETE. Read it once, then remove it so a refresh doesn't show it again.
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
+
+// One-shot flag: skip the Manage dialog's open animation after a category delete (the dialog stays open).
+$noAnim = !empty($_SESSION['no_anim']);
+unset($_SESSION['no_anim']);
+
 $flashText = [
     'created' => ['Task created',  'was added to your list.'],
     'updated' => ['Task updated',  'was updated successfully.'],
@@ -604,7 +610,7 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
           <?php $color = $categories[$task['cat']] ?? '#6c7086'; $state = taskState($task); ?>
           <li>
             <a class="task<?= $task['done'] ? ' done' : '' ?><?= $state === 'overdue' ? ' overdue' : '' ?><?= ($showDetail && $selectedId === $task['id']) ? ' selected' : '' ?>"
-               href="<?= e(url(['task' => $task['id'], 'new' => null, 'edit' => null, 'del' => null])) ?>">
+               href="<?= e(url(['task' => $task['id'], 'new' => null, 'edit' => null, 'del' => null, 'manage' => null, 'rename' => null, 'delcat' => null])) ?>">
               <span class="check-static state-<?= $state ?>" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="19" height="19" rx="6"/><?php if ($task['done']): ?><path d="m7.5 12.5 3 3 6-6.5"/><?php endif; ?></svg>
               </span>
@@ -622,7 +628,7 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
             </a>
             <!-- Checkbox hit area: a separate link on top of the card (links can't be nested), opens the confirm popup -->
             <?php $checkLabel = ($task['done'] ? 'Mark as not completed: ' : 'Mark as completed: ') . $task['title']; ?>
-            <a class="check-link" href="<?= e(url(['confirm' => $task['id'], 'del' => null])) ?>" aria-label="<?= e($checkLabel) ?>" title="<?= e($task['done'] ? 'Mark as not completed' : 'Mark as completed') ?>"></a>
+            <a class="check-link" href="<?= e(url(['confirm' => $task['id'], 'del' => null, 'manage' => null, 'rename' => null, 'delcat' => null])) ?>" aria-label="<?= e($checkLabel) ?>" title="<?= e($task['done'] ? 'Mark as not completed' : 'Mark as completed') ?>"></a>
           </li>
         <?php endforeach; ?>
       </ul>
@@ -648,7 +654,7 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
   <aside class="panel" id="panel">
 
     <!-- Mobile only: closes the sheet and goes back to the list -->
-    <a class="panel-close" href="<?= e(url(['task' => null, 'new' => null, 'edit' => null, 'del' => null])) ?>" aria-label="Back to tasks">
+    <a class="panel-close" href="<?= e(url(['task' => null, 'new' => null, 'edit' => null, 'del' => null, 'manage' => null, 'rename' => null, 'delcat' => null])) ?>" aria-label="Back to tasks">
       <svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>Back to tasks
     </a>
 
@@ -709,7 +715,7 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
         </div>
 
         <div class="form-actions">
-          <a class="btn btn-cancel" href="<?= e(url(['edit' => null, 'new' => null])) ?>">Cancel</a>
+          <a class="btn btn-cancel" href="<?= e(url(['edit' => null, 'new' => null, 'manage' => null, 'rename' => null, 'delcat' => null])) ?>">Cancel</a>
           <button type="submit" name="submit" class="btn btn-primary">
             <img class="d-only" src="../assets/icons/edit-dark.png" alt="" style="width:15px;height:15px;">
             <svg class="i m-only" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>Save changes
@@ -758,11 +764,11 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
 
       <!-- Edit / Delete action buttons -->
       <div class="panel-actions">
-        <a class="btn btn-outline btn-edit" href="<?= e(url(['edit' => 1, 'new' => null, 'del' => null])) ?>">
+        <a class="btn btn-outline btn-edit" href="<?= e(url(['edit' => 1, 'new' => null, 'del' => null, 'manage' => null, 'rename' => null, 'delcat' => null])) ?>">
           <img src="../assets/icons/edit.png" alt="" class="ed d-only">
           <svg class="i m-only" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>Edit task
         </a>
-        <a class="btn btn-danger btn-del" href="<?= e(url(['del' => 1, 'new' => null, 'edit' => null])) ?>">
+        <a class="btn btn-danger btn-del" href="<?= e(url(['del' => 1, 'new' => null, 'edit' => null, 'manage' => null, 'rename' => null, 'delcat' => null])) ?>">
           <img src="../assets/icons/delete-red.png" alt="" style="width:15px;height:15px;">Delete task
         </a>
       </div>
@@ -840,7 +846,7 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
     <h2 id="delTitle">Delete this task?</h2>
     <p>This will remove <strong><?= e($selected['title']) ?></strong> from your task list. This action cannot be undone.</p>
     <div class="dialog-actions">
-      <a class="btn btn-outline" id="delCancel" href="<?= e(url(['del' => null])) ?>">Cancel</a>
+      <a class="btn btn-outline" id="delCancel" href="<?= e(url(['del' => null, 'manage' => null, 'rename' => null, 'delcat' => null])) ?>">Cancel</a>
       <form method="POST" style="margin:0">
         <input type="hidden" name="action"  value="delete">
         <input type="hidden" name="task_id" value="<?= e($selectedId) ?>">
@@ -894,7 +900,7 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
     <h2 id="flashTitle"><?= e($flashText[$flash['type']][0]) ?></h2>
     <p><strong><?= e($flash['title']) ?></strong> <?= e($flashText[$flash['type']][1]) ?></p>
     <div class="dialog-actions">
-      <a class="btn btn-primary" id="flashDone" href="<?= e(url()) ?>">Done</a>
+      <a class="btn btn-primary" id="flashDone" href="<?= e(url(['manage' => null, 'rename' => null, 'delcat' => null])) ?>">Done</a>
     </div>
     <div class="flash-bar" aria-hidden="true"><span></span></div>
   </div>
@@ -902,7 +908,7 @@ $closeManage = url(['manage' => null, 'rename' => null, 'delcat' => null]);
 <?php endif; ?>
 
 <?php if ($showManage): // ---- MANAGE CATEGORIES DIALOG ---- ?>
-<div class="overlay" id="manageOverlay" role="dialog" aria-modal="true" aria-labelledby="manageTitle">
+<div class="overlay<?= ($noAnim || $renameName || $delCatName || $catErrors) ? ' no-anim' : '' ?>" id="manageOverlay" role="dialog" aria-modal="true" aria-labelledby="manageTitle">
   <div class="modal">
     <div class="modal-head">
       <div>

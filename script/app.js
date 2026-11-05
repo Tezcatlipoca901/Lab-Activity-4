@@ -77,11 +77,73 @@ document.addEventListener('DOMContentLoaded', () => {
       radio.closest('.swatches').querySelectorAll('.swatch').forEach(s => s.classList.toggle('on', s.contains(radio) && radio.checked));
     });
   });
+
+  const manageOverlay = $('#manageOverlay');
+
+  // Unsaved = the "New category" box or the rename box differs from what the server rendered
+  function isDirty() {
+    const add = $('#cat_name'), ren = $('.rename-input');
+    return (!!add && !add.disabled && add.value.trim() !== add.defaultValue.trim())
+        || (!!ren && ren.value.trim() !== ren.defaultValue.trim());
+  }
+
+  // One edit at a time: while a row is being renamed, lock the "New category" form
+  function syncManageLock() {
+    const add = $('#cat_name');
+    if (!manageOverlay || !add) return;
+    const addForm = add.closest('form');
+    const renaming = !!$('.rename-input');
+    addForm.querySelectorAll('input, button').forEach(el => { el.disabled = renaming; });
+    addForm.classList.toggle('locked', renaming);
+  }
+
   // Focus the field that needs attention (rename box, or the new-category box after an error)
-  const renameInput = $('.rename-input');
-  const badCatInput = $('.cat-add .input.bad');
-  if (renameInput) { renameInput.focus(); renameInput.select(); }
-  else if (badCatInput) badCatInput.focus();
+  function focusManageField() {
+    const renameInput = $('.rename-input');
+    const badCatInput = $('.cat-add .input.bad');
+    if (renameInput) { renameInput.focus(); renameInput.select(); }
+    else if (badCatInput) badCatInput.focus();
+  }
+
+  syncManageLock();
+  focusManageField();
+
+  // Rename / delete / cancel links inside the list: swap only the list, no page reload
+  async function swapCatList(url) {
+    try {
+      const res  = await fetch(url, { credentials: 'same-origin' });
+      const doc  = new DOMParser().parseFromString(await res.text(), 'text/html');
+      const next = doc.querySelector('#manageOverlay .cat-list');
+      const cur  = $('#manageOverlay .cat-list');
+      if (!next || !cur) { location.href = url; return; }
+      cur.replaceWith(next);
+      history.replaceState(null, '', url);
+      syncManageLock();
+      focusManageField();
+    } catch (_) {
+      location.href = url;
+    }
+  }
+
+  document.addEventListener('click', e => {
+    const a = e.target.closest('#manageOverlay .cat-list a[href]');
+    if (!a) return;
+    e.preventDefault();
+    if (isDirty()) {
+      if (!confirm('Discard unsaved changes?')) return;
+      const add = $('#cat_name');
+      if (add && !add.disabled) add.value = add.defaultValue;   // clear typed text so it isn't left half-entered
+    }
+    swapCatList(a.href);
+  });
+
+  // X button (and Esc, which calls .click() on it): warn before losing typed text
+  const manageClose = $('#manageClose');
+  if (manageClose) {
+    manageClose.addEventListener('click', e => {
+      if (isDirty() && !confirm('Discard unsaved changes?')) e.preventDefault();
+    });
+  }
 
   /* ---------- "Mark as completed?" popup: focus the confirm button, prevent double submit ---------- */
   const confirmOk = $('#confirmOk');

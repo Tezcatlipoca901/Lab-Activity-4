@@ -625,3 +625,9 @@ label.swatch { cursor: pointer; }
   .tab-ic { display: none; }
   .tab, .tab:first-child { font-size: 13px; }
 }
+
+.overlay.no-anim,
+.overlay.no-anim .modal { animation: none; }
+
+.modal-sec.locked { opacity: .5; }
+.modal-sec.locked * { cursor: not-allowed; }
