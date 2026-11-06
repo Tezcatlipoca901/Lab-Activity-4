@@ -5,7 +5,7 @@
   font-display: swap;
 }
 
-/* ---------- Themes (Catppuccin) ---------- */
+/* ---------- Themes --------- */
 :root, [data-theme="mocha"] {
   --base:#1e1e2e; --mantle:#181825; --crust:#11111b;
   --text:#cdd6f4; --sub:#a6adc8; --overlay:#6c7086; --s0:#313244; --s1:#45475a;
@@ -639,24 +639,18 @@ label.swatch { cursor: pointer; }
 
 .modal-sec.locked { opacity: .5; }
 .modal-sec.locked * { cursor: not-allowed; }
-/* =====================================================================
-   QA fixes #10 – #13
-   ===================================================================== */
 
-/* #10 Long unbroken task names: wrap inside the panel / dialogs instead of running past the edge */
 .detail-head > div { min-width: 0; flex: 1; }
 .detail-head h2 { overflow-wrap: anywhere; word-break: break-word; }
 .status-ring { flex: none; margin-left: 12px; }
 .dialog h2, .dialog p, .dialog p strong { overflow-wrap: anywhere; word-break: break-word; }
 .confirm-row span { min-width: 0; overflow-wrap: anywhere; }
 
-/* #12 Header: the search box shrinks instead of pushing the bar wider than the screen */
 .topbar { min-width: 0; }
 .search-form { flex: 0 1 358px; min-width: 120px; }
 .search-form .search { width: 100%; }
 .brand, .theme-wrap { flex: none; }
 
-/* #11 Toolbar: tabs + sort wrap onto a second line instead of overflowing */
 .toolbar { height: auto; min-height: 64px; flex-wrap: wrap; gap: 10px 16px; padding: 12px 18px 12px 14px; }
 .tabs { flex-wrap: wrap; gap: 4px; min-width: 0; }
 .sort { margin-left: auto; flex: none; }
@@ -665,7 +659,6 @@ label.swatch { cursor: pointer; }
   .tab, .tab:first-child { padding: 0 14px; font-size: 15px; }
 }
 
-/* #13 Task cards: when the card is narrow, the chips + date drop under the title instead of squeezing it */
 .task-top { flex-wrap: wrap; row-gap: 8px; }
 .task-title { flex: 1 1 180px; min-width: 0; }
 .task-meta { flex-wrap: wrap; row-gap: 6px; }
